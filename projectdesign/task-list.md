@@ -50,8 +50,8 @@
 ## Phase 1: MVP - Authentication & Basic Infrastructure (Hours 1-4)
 
 ### Authentication Flow
-25. [ ] Create `src/types/user.types.ts` with User interface
-26. [ ] Create `src/services/auth.service.ts` with Firebase Auth methods
+25. [x] Create `src/types/user.types.ts` with User interface
+26. [x] Create `src/services/auth.service.ts` with Firebase Auth methods
 27. [ ] Build Sign Up screen (`app/auth/signup.tsx`) with email/password
 28. [ ] Build Login screen (`app/auth/login.tsx`) with email/password
 29. [ ] Implement authentication state management (Context or Zustand)
@@ -479,6 +479,29 @@
 
 ---
 
+## Testing Tasks (Minimal Critical Path)
+
+### Test Infrastructure Setup
+351. [x] Install testing dependencies (jest, @testing-library/react-native)
+352. [x] Create jest.config.js
+353. [x] Create jest.setup.js with Firebase mocks
+354. [x] Add test scripts to package.json
+355. [x] Create Firebase auth mock helpers
+356. [x] Document testing setup in TEST_SETUP.md
+
+### Service Tests
+357. [x] Write auth.service tests (sign up, sign in, logout, etc.)
+358. [ ] Write user.service tests (create, update, fetch user)
+359. [ ] Write message.service tests (send, receive, queue)
+360. [ ] Write database tests (SQLite operations)
+
+### Run Tests
+361. [x] Run auth service tests and fix any failures
+362. [ ] Run all service tests before major features
+363. [ ] Check test coverage meets minimum (80%+ for services)
+
+---
+
 ## Continuous Tasks (Throughout Development)
 
 333. [ ] Commit after each completed task with descriptive message
@@ -489,6 +512,7 @@
 338. [ ] Monitor Firebase usage and costs
 339. [ ] Document any blockers or issues
 340. [ ] Take breaks to avoid burnout!
+341. [ ] Run unit tests before committing critical services
 
 ---
 
