@@ -34,11 +34,16 @@ yarn-error.*
 .env*.local
 .env
 
-/firebase
-
 # Firebase config files
 google-services.json
 GoogleService-Info.plist
+
+# Firebase emulator and logs
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+pubsub-debug.log
 
 # typescript
 *.tsbuildinfo

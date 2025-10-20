@@ -2,6 +2,7 @@ import Constants from 'expo-constants';
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
 
 // Get Firebase config from environment variables
@@ -32,5 +33,8 @@ const db = getFirestore(app);
 // Initialize Storage
 const storage = getStorage(app);
 
-export { app, auth, db, storage };
+// Initialize Cloud Functions
+const functions = getFunctions(app);
+
+export { app, auth, db, functions, storage };
 

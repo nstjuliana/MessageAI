@@ -38,12 +38,12 @@
 18. [x] Set up environment variables with `expo-constants` and `app.config.js`
 
 ### Deployment Validation
-19. [ ] Deploy "Hello World" version to Expo Go
-20. [ ] Create simple auth screen that connects to Firebase (just to verify connection)
-21. [ ] Test on physical device via Expo Go
-22. [ ] Verify Firebase connection works on both platforms
-23. [ ] Set up Cloud Functions project: `firebase init functions`
-24. [ ] Deploy a test Cloud Function and verify it's callable from app
+19. [x] Deploy "Hello World" version to Expo Go
+20. [x] Create simple auth screen that connects to Firebase (just to verify connection)
+21. [x] Test on physical device via Expo Go
+22. [x] Verify Firebase connection works on both platforms
+23. [x] Set up Cloud Functions project: `firebase init functions`
+24. [x] Deploy a test Cloud Function and verify it's callable from app
 
 ---
 
