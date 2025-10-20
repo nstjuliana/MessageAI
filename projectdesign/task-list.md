@@ -8,14 +8,14 @@
 
 ### Firebase & Deployment Setup
 - [x] Create Firebase project in console
-- [ ] Enable Firebase Authentication (Email/Password provider)
-- [ ] Create Firestore database (start in test mode)
-- [ ] Set up Firestore security rules (basic read/write for authenticated users)
-- [ ] Enable Firebase Storage for media uploads
-- [ ] Download Firebase config files (`google-services.json`, `GoogleService-Info.plist`)
-- [ ] Install Firebase SDK: `npm install firebase @react-native-firebase/app @react-native-firebase/auth @react-native-firebase/firestore`
+- [x] Enable Firebase Authentication (Email/Password provider)
+- [x] Create Firestore database (start in test mode)
+- [x] Set up Firestore security rules (basic read/write for authenticated users)
+- [x] Enable Firebase Storage for media uploads
+- [x] Download Firebase config files (`google-services.json`, `GoogleService-Info.plist`)
+- [x] Install Firebase SDK: `npm install firebase @react-native-firebase/app @react-native-firebase/auth @react-native-firebase/firestore`
 - [ ] Create `src/config/firebase.ts` with Firebase initialization
-- [ ] Add Firebase config to `.gitignore` and use environment variables
+- [x] Add Firebase config to `.gitignore` and use environment variables
 
 ### Expo Configuration
 - [ ] Update `app.json` with proper app metadata (name, slug, version, icon)
