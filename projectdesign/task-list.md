@@ -32,10 +32,10 @@
 ### Project Structure Setup
 13. [x] Create folder structure: `src/screens`, `src/components`, `src/services`, `src/utils`, `src/types`, `src/hooks`
 14. [x] Set up TypeScript paths in `tsconfig.json` for clean imports (`@/components`, `@/screens`, etc.)
-15. [ ] Install essential dependencies: `expo-router`, `expo-sqlite`, `expo-notifications`, `@react-native-community/netinfo`
-16. [ ] Remove tab navigation structure (delete `app/(tabs)` folder)
-17. [ ] Create basic navigation structure with Expo Router (single main screen)
-18. [ ] Set up environment variables with `expo-constants` and `app.config.js`
+15. [x] Install essential dependencies: `expo-router`, `expo-sqlite`, `expo-notifications`, `@react-native-community/netinfo`
+16. [x] Remove tab navigation structure (delete `app/(tabs)` folder)
+17. [x] Create basic navigation structure with Expo Router (single main screen)
+18. [x] Set up environment variables with `expo-constants` and `app.config.js`
 
 ### Deployment Validation
 19. [ ] Deploy "Hello World" version to Expo Go
