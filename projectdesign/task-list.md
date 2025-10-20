@@ -31,7 +31,7 @@
 
 ### Project Structure Setup
 13. [x] Create folder structure: `src/screens`, `src/components`, `src/services`, `src/utils`, `src/types`, `src/hooks`
-14. [ ] Set up TypeScript paths in `tsconfig.json` for clean imports (`@/components`, `@/screens`, etc.)
+14. [x] Set up TypeScript paths in `tsconfig.json` for clean imports (`@/components`, `@/screens`, etc.)
 15. [ ] Install essential dependencies: `expo-router`, `expo-sqlite`, `expo-notifications`, `@react-native-community/netinfo`
 16. [ ] Remove tab navigation structure (delete `app/(tabs)` folder)
 17. [ ] Create basic navigation structure with Expo Router (single main screen)
