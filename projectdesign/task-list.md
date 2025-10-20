@@ -7,7 +7,7 @@
 ## Phase 0: Setup & Deployment Pipeline (Priority)
 
 ### Firebase & Deployment Setup
-- [ ] Create Firebase project in console
+- [x] Create Firebase project in console
 - [ ] Enable Firebase Authentication (Email/Password provider)
 - [ ] Create Firestore database (start in test mode)
 - [ ] Set up Firestore security rules (basic read/write for authenticated users)
@@ -32,7 +32,8 @@
 - [ ] Create folder structure: `src/screens`, `src/components`, `src/services`, `src/utils`, `src/types`, `src/hooks`
 - [ ] Set up TypeScript paths in `tsconfig.json` for clean imports (`@/components`, `@/screens`, etc.)
 - [ ] Install essential dependencies: `expo-router`, `expo-sqlite`, `expo-notifications`, `@react-native-community/netinfo`
-- [ ] Create basic navigation structure with Expo Router
+- [ ] Remove tab navigation structure (delete `app/(tabs)` folder)
+- [ ] Create basic navigation structure with Expo Router (single main screen)
 - [ ] Set up environment variables with `expo-constants` and `app.config.js`
 
 ### Deployment Validation
