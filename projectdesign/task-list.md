@@ -18,15 +18,16 @@
 - [x] Add Firebase config to `.gitignore` and use environment variables
 
 ### Expo Configuration
-- [ ] Update `app.json` with proper app metadata (name, slug, version, icon)
-- [ ] Configure `app.json` for Firebase (google-services.json paths)
-- [ ] Install Expo dev dependencies: `npx expo install expo-dev-client`
+- [x] Update `app.json` with proper app metadata (name, slug, version, icon)
+- [x] Configure `app.json` for Firebase (google-services.json paths)
+<!-- Skip for now -->
+<!-- - [ ] Install Expo dev dependencies: `npx expo install expo-dev-client`
 - [ ] Set up EAS (Expo Application Services): `npm install -g eas-cli && eas login`
 - [ ] Configure EAS Build: `eas build:configure`
 - [ ] Update `eas.json` for development builds
 - [ ] Create development build for iOS: `eas build --profile development --platform ios`
-- [ ] Create development build for Android: `eas build --profile development --platform android`
-- [ ] Test app launches on both iOS simulator and Android emulator
+- [ ] Create development build for Android: `eas build --profile development --platform android`-->
+- [x] Test app launches on both iOS simulator and Android emulator 
 
 ### Project Structure Setup
 - [ ] Create folder structure: `src/screens`, `src/components`, `src/services`, `src/utils`, `src/types`, `src/hooks`
