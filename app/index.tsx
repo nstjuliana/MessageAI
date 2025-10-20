@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { httpsCallable } from 'firebase/functions';
 import { useState } from 'react';
@@ -69,7 +70,27 @@ export default function HomeScreen() {
       <Text style={styles.title}>MessageAI</Text>
       <Text style={styles.subtitle}>Chat List Coming Soon</Text>
       
+      <View style={styles.authSection}>
+        <Button
+          title="Sign Up"
+          onPress={() => router.push('/auth/signup')}
+          color="#007AFF"
+        />
+        
+        <View style={styles.buttonSpacer} />
+        
+        <Button
+          title="Log In"
+          onPress={() => router.push('/auth/login')}
+          color="#34C759"
+        />
+      </View>
+      
+      <View style={styles.divider} />
+      
       <View style={styles.testSection}>
+        <Text style={styles.testTitle}>Testing Tools</Text>
+        
         <Button
           title="Test Firebase Connection"
           onPress={testFirebaseConnection}
@@ -119,10 +140,28 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 40,
   },
+  authSection: {
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  divider: {
+    width: '80%',
+    height: 1,
+    backgroundColor: '#ddd',
+    marginVertical: 20,
+  },
   testSection: {
     width: '100%',
     maxWidth: 400,
     alignItems: 'center',
+  },
+  testTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 16,
   },
   buttonSpacer: {
     height: 12,

@@ -52,12 +52,12 @@
 ### Authentication Flow
 25. [x] Create `src/types/user.types.ts` with User interface
 26. [x] Create `src/services/auth.service.ts` with Firebase Auth methods
-27. [ ] Build Sign Up screen (`app/auth/signup.tsx`) with email/password
-28. [ ] Build Login screen (`app/auth/login.tsx`) with email/password
+27. [x] Build Sign Up screen (`app/auth/signup.tsx`) with email/password
+28. [x] Build Login screen (`app/auth/login.tsx`) with email/password
 29. [ ] Implement authentication state management (Context or Zustand)
 30. [ ] Create protected route wrapper for authenticated screens
 31. [ ] Add logout functionality
-32. [ ] Handle authentication errors and display to user
+32. [x] Handle authentication errors and display to user
 33. [ ] Persist auth state across app restarts
 
 ### User Profile Setup
