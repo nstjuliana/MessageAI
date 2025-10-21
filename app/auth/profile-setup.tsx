@@ -15,19 +15,33 @@ import {
 
 import { useAuth } from '@/contexts/AuthContext';
 import { createWelcomeChat } from '@/services/chat.service';
-import { createUser } from '@/services/user.service';
+import { createUser, isUsernameAvailable } from '@/services/user.service';
+import { formatUsername, validateUsername } from '@/utils/username';
 
 export default function ProfileSetupScreen() {
   const { user } = useAuth();
+  const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
   const [loading, setLoading] = useState(false);
+  const [checkingUsername, setCheckingUsername] = useState(false);
   const [errors, setErrors] = useState<{
+    username?: string;
     displayName?: string;
   }>({});
 
   const validateForm = (): boolean => {
     const newErrors: typeof errors = {};
+
+    // Username validation
+    if (!username.trim()) {
+      newErrors.username = 'Username is required';
+    } else {
+      const usernameValidation = validateUsername(username);
+      if (!usernameValidation.valid) {
+        newErrors.username = usernameValidation.error;
+      }
+    }
 
     // Display name validation
     if (!displayName.trim()) {
@@ -57,8 +71,19 @@ export default function ProfileSetupScreen() {
     setLoading(true);
 
     try {
+      // Check username availability
+      const formattedUsername = formatUsername(username);
+      const available = await isUsernameAvailable(formattedUsername);
+      
+      if (!available) {
+        setErrors({ ...errors, username: 'Username is already taken' });
+        setLoading(false);
+        return;
+      }
+
       // Create user profile in Firestore
       await createUser(user.uid, {
+        username: formattedUsername,
         displayName: displayName.trim(),
         email: user.email || undefined,
         bio: bio.trim() || undefined,
@@ -114,6 +139,40 @@ export default function ProfileSetupScreen() {
             <Pressable style={styles.avatarButton} onPress={() => Alert.alert('Coming Soon', 'Avatar upload will be available soon!')}>
               <Text style={styles.avatarButtonText}>Add Photo</Text>
             </Pressable>
+          </View>
+
+          {/* Username Input */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>
+              Username <Text style={styles.required}>*</Text>
+            </Text>
+            <View style={styles.usernameInputContainer}>
+              <Text style={styles.usernamePrefix}>@</Text>
+              <TextInput
+                style={[styles.usernameInput, errors.username && styles.inputError]}
+                placeholder="username"
+                value={username}
+                onChangeText={(text) => {
+                  // Only allow lowercase letters, numbers, and underscores
+                  const filtered = text.toLowerCase().replace(/[^a-z0-9_]/g, '');
+                  setUsername(filtered);
+                  if (errors.username) {
+                    setErrors({ ...errors, username: undefined });
+                  }
+                }}
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="username"
+                editable={!loading}
+                maxLength={20}
+              />
+            </View>
+            {errors.username && (
+              <Text style={styles.errorText}>{errors.username}</Text>
+            )}
+            <Text style={styles.helperText}>
+              {username.length}/20 characters • Letters, numbers, and underscores only
+            </Text>
           </View>
 
           {/* Display Name Input */}
@@ -270,6 +329,29 @@ const styles = StyleSheet.create({
   },
   required: {
     color: '#FF3B30',
+  },
+  usernameInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    height: 50,
+  },
+  usernamePrefix: {
+    fontSize: 16,
+    color: '#007AFF',
+    fontWeight: '600',
+    paddingLeft: 16,
+  },
+  usernameInput: {
+    flex: 1,
+    height: 50,
+    paddingHorizontal: 8,
+    fontSize: 16,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
   },
   input: {
     height: 50,

@@ -9,6 +9,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
@@ -298,6 +299,74 @@ export function onUserChatsSnapshot(
   } catch (error) {
     console.error('Error setting up chats listener:', error);
     return () => {}; // Return no-op unsubscribe function
+  }
+}
+
+/**
+ * Find existing DM chat between two users, or create a new one
+ * Prevents duplicate DM chats
+ * @param currentUserId - Current user's ID
+ * @param otherUserId - Other user's ID
+ * @returns Existing or newly created chat
+ */
+export async function findOrCreateDMChat(
+  currentUserId: string,
+  otherUserId: string
+): Promise<Chat> {
+  try {
+    console.log(`🔍 Looking for existing DM between ${currentUserId} and ${otherUserId}`);
+
+    // Query for existing DM chat between these two users
+    const chatsRef = collection(db, CHATS_COLLECTION);
+    const q = query(
+      chatsRef,
+      where('type', '==', 'dm'),
+      where('participantIds', 'array-contains', currentUserId)
+    );
+
+    const snapshot = await getDocs(q);
+
+    // Check if any of the results includes both users
+    for (const docSnap of snapshot.docs) {
+      const data = docSnap.data();
+      const participants = data.participantIds || [];
+
+      // Check if this chat has exactly these two participants
+      if (
+        participants.length === 2 &&
+        participants.includes(currentUserId) &&
+        participants.includes(otherUserId)
+      ) {
+        console.log(`✅ Found existing DM chat: ${docSnap.id}`);
+
+        return {
+          id: docSnap.id,
+          type: 'dm',
+          participantIds: participants,
+          adminIds: data.adminIds || [],
+          groupName: data.groupName,
+          groupAvatarUrl: data.groupAvatarUrl,
+          lastMessageId: data.lastMessageId,
+          lastMessageText: data.lastMessageText,
+          lastMessageAt: data.lastMessageAt?.toMillis?.() || data.lastMessageAt || 0,
+          createdAt: data.createdAt?.toMillis?.() || data.createdAt || 0,
+          updatedAt: data.updatedAt?.toMillis?.() || data.updatedAt || 0,
+        };
+      }
+    }
+
+    // No existing chat found, create a new one
+    console.log(`📝 No existing DM found, creating new chat`);
+
+    const newChat = await createChat({
+      type: 'dm',
+      participantIds: [currentUserId, otherUserId],
+    });
+
+    return newChat;
+  } catch (error: any) {
+    console.error('❌ Error finding or creating DM chat:', error);
+    throw error;
   }
 }
 

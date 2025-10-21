@@ -23,11 +23,70 @@ import {
     serverTimestamp,
     setDoc,
     updateDoc,
-    where,
     type Unsubscribe
 } from 'firebase/firestore';
 
 const USERS_COLLECTION = 'users';
+const USERNAMES_COLLECTION = 'usernames';
+
+/**
+ * Check if a username is available
+ * @param username - Username to check (will be lowercased)
+ * @returns true if available, false if taken
+ */
+export async function isUsernameAvailable(username: string): Promise<boolean> {
+  try {
+    const usernameDoc = doc(db, USERNAMES_COLLECTION, username.toLowerCase());
+    const docSnap = await getDoc(usernameDoc);
+    return !docSnap.exists();
+  } catch (error) {
+    console.error('Error checking username availability:', error);
+    throw new Error('Failed to check username availability.');
+  }
+}
+
+/**
+ * Reserve a username for a user (creates entry in usernames collection)
+ * @param username - Username to reserve (will be lowercased)
+ * @param userId - User ID
+ */
+async function reserveUsername(username: string, userId: string): Promise<void> {
+  const usernameDoc = doc(db, USERNAMES_COLLECTION, username.toLowerCase());
+  await setDoc(usernameDoc, {
+    userId,
+    createdAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Release a username (deletes entry from usernames collection)
+ * @param username - Username to release (will be lowercased)
+ */
+async function releaseUsername(username: string): Promise<void> {
+  const usernameDoc = doc(db, USERNAMES_COLLECTION, username.toLowerCase());
+  await deleteDoc(usernameDoc);
+}
+
+/**
+ * Get user ID by username
+ * @param username - Username to look up
+ * @returns User ID or null if not found
+ */
+export async function getUserIdByUsername(username: string): Promise<string | null> {
+  try {
+    const usernameDoc = doc(db, USERNAMES_COLLECTION, username.toLowerCase());
+    const docSnap = await getDoc(usernameDoc);
+    
+    if (!docSnap.exists()) {
+      return null;
+    }
+    
+    return docSnap.data().userId;
+  } catch (error) {
+    console.error('Error getting user by username:', error);
+    return null;
+  }
+}
 
 /**
  * Create a new user document in Firestore
@@ -42,48 +101,69 @@ export async function createUser(
 ): Promise<User> {
   try {
     const now = Date.now();
+    const username = userData.username.toLowerCase();
     
-    // Build user document, excluding undefined fields
-    const userDoc: any = {
-      displayName: userData.displayName,
-      bio: userData.bio || '',
-      lastSeen: serverTimestamp(),
-      presence: 'online',
-      deviceTokens: [],
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-
-    // Only add optional fields if they have values
-    if (userData.phoneNumber !== undefined) {
-      userDoc.phoneNumber = userData.phoneNumber;
+    // Check if username is available
+    const available = await isUsernameAvailable(username);
+    if (!available) {
+      throw new Error('Username is already taken');
     }
-    if (userData.email !== undefined) {
-      userDoc.email = userData.email;
-    }
-    if (userData.avatarUrl !== undefined) {
-      userDoc.avatarUrl = userData.avatarUrl;
-    }
+    
+    // Reserve username first
+    await reserveUsername(username, userId);
+    
+    try {
+      // Build user document, excluding undefined fields
+      const userDoc: any = {
+        username,
+        displayName: userData.displayName,
+        bio: userData.bio || '',
+        lastSeen: serverTimestamp(),
+        presence: 'online',
+        deviceTokens: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
 
-    const userRef = doc(db, USERS_COLLECTION, userId);
-    await setDoc(userRef, userDoc);
+      // Only add optional fields if they have values
+      if (userData.phoneNumber !== undefined) {
+        userDoc.phoneNumber = userData.phoneNumber;
+      }
+      if (userData.email !== undefined) {
+        userDoc.email = userData.email;
+      }
+      if (userData.avatarUrl !== undefined) {
+        userDoc.avatarUrl = userData.avatarUrl;
+      }
 
-    // Return the user object with actual values
-    return {
-      id: userId,
-      displayName: userData.displayName,
-      phoneNumber: userData.phoneNumber,
-      email: userData.email,
-      avatarUrl: userData.avatarUrl,
-      bio: userData.bio || '',
-      lastSeen: now,
-      presence: 'online',
-      deviceTokens: [],
-      createdAt: now,
-      updatedAt: now,
-    };
-  } catch (error) {
+      const userRef = doc(db, USERS_COLLECTION, userId);
+      await setDoc(userRef, userDoc);
+
+      // Return the user object with actual values
+      return {
+        id: userId,
+        username,
+        displayName: userData.displayName,
+        phoneNumber: userData.phoneNumber,
+        email: userData.email,
+        avatarUrl: userData.avatarUrl,
+        bio: userData.bio || '',
+        lastSeen: now,
+        presence: 'online',
+        deviceTokens: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+    } catch (userCreationError) {
+      // If user creation fails, release the username
+      await releaseUsername(username);
+      throw userCreationError;
+    }
+  } catch (error: any) {
     console.error('Error creating user:', error);
+    if (error.message === 'Username is already taken') {
+      throw error;
+    }
     throw new Error('Failed to create user profile. Please try again.');
   }
 }
@@ -123,6 +203,7 @@ export async function getPublicProfile(
 
     return {
       id: user.id,
+      username: user.username,
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
       bio: user.bio,
@@ -291,11 +372,13 @@ export async function removeDeviceToken(
 /**
  * Search for users by display name
  * @param searchQuery - Search term
+ * @param excludeUserId - Optional user ID to exclude from results (usually current user)
  * @param maxResults - Maximum number of results to return
  * @returns Array of matching users
  */
 export async function searchUsers(
   searchQuery: string,
+  excludeUserId?: string,
   maxResults: number = 20
 ): Promise<PublicUserProfile[]> {
   try {
@@ -303,31 +386,40 @@ export async function searchUsers(
       return [];
     }
 
-    // Firestore doesn't support case-insensitive search by default
-    // This is a basic implementation - for production, consider using
-    // Algolia, Elasticsearch, or storing a lowercase version of displayName
+    const searchLower = searchQuery.toLowerCase().trim();
+
+    // Firestore doesn't support full-text search or case-insensitive queries
+    // For MVP, we'll fetch all users and filter client-side
+    // In production, use Algolia or similar for better search
     const usersRef = collection(db, USERS_COLLECTION);
-    const q = query(
-      usersRef,
-      where('displayName', '>=', searchQuery),
-      where('displayName', '<=', searchQuery + '\uf8ff'),
-      limit(maxResults)
-    );
+    const q = query(usersRef, limit(100)); // Limit to prevent huge queries
+    const snapshot = await getDocs(q);
 
-    const querySnapshot = await getDocs(q);
-    const users: PublicUserProfile[] = [];
-
-    querySnapshot.forEach((doc) => {
-      const userData = firestoreUserToUser(doc.id, doc.data());
-      users.push({
-        id: userData.id,
-        displayName: userData.displayName,
-        avatarUrl: userData.avatarUrl,
-        bio: userData.bio,
-        presence: userData.presence,
-        lastSeen: userData.lastSeen,
-      });
-    });
+    const users: PublicUserProfile[] = snapshot.docs
+      .map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          username: data.username || '',
+          displayName: data.displayName || 'Unknown User',
+          bio: data.bio,
+          avatarUrl: data.avatarUrl,
+          presence: data.presence || 'offline',
+          lastSeen: firestoreTimestampToMillis(data.lastSeen),
+        } as PublicUserProfile;
+      })
+      .filter((user) => {
+        // Exclude specified user
+        if (excludeUserId && user.id === excludeUserId) {
+          return false;
+        }
+        // Filter by search term (case-insensitive) - search both username and display name
+        return (
+          user.displayName.toLowerCase().includes(searchLower) ||
+          user.username.toLowerCase().includes(searchLower)
+        );
+      })
+      .slice(0, maxResults); // Limit results
 
     return users;
   } catch (error) {
@@ -433,6 +525,7 @@ export async function deleteUser(userId: string): Promise<void> {
 function firestoreUserToUser(userId: string, data: any): User {
   return {
     id: userId,
+    username: data.username || '',
     displayName: data.displayName || '',
     phoneNumber: data.phoneNumber,
     email: data.email,

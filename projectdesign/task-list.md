@@ -98,11 +98,11 @@
 58. [x] Handle empty state (no chats yet)
 
 ### Start New Chat
-59. [ ] Build user search/selection screen for new chat
-60. [ ] Query Firestore for users (search by display name)
-61. [ ] Create new chat in Firestore when user selected
-62. [ ] Navigate to new chat conversation screen
-63. [ ] Handle duplicate chat prevention (don't create multiple DMs with same user)
+59. [x] Build user search/selection screen for new chat
+60. [x] Query Firestore for users (search by display name)
+61. [x] Create new chat in Firestore when user selected
+62. [x] Navigate to new chat conversation screen (ready for next task)
+63. [x] Handle duplicate chat prevention (don't create multiple DMs with same user)
 
 ### Chat Conversation Screen
 64. [ ] Build Chat screen UI (`app/chat/[chatId].tsx`)

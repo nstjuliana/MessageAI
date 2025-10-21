@@ -32,12 +32,21 @@ export default function AuthenticatedLayout() {
 
   // User is authenticated, render the protected screens
   return (
-    <Stack>
+    <Stack
+      screenOptions={{
+        headerShown: false, // Hide header for all screens by default
+      }}
+    >
       <Stack.Screen 
         name="chats" 
         options={{ 
-          title: 'Chats',
-          headerShown: true,
+          headerShown: false,
+        }} 
+      />
+      <Stack.Screen 
+        name="new-chat" 
+        options={{ 
+          headerShown: false,
         }} 
       />
     </Stack>

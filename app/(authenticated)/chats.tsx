@@ -3,6 +3,7 @@
  * Shows all user's conversations with real-time updates
  */
 
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -202,6 +203,14 @@ export default function ChatsScreen() {
         }
       />
 
+      {/* New Chat FAB */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => router.push('/(authenticated)/new-chat')}
+      >
+        <Text style={styles.fabIcon}>✏️</Text>
+      </TouchableOpacity>
+
       {/* Debug info - remove later */}
       {__DEV__ && (
         <View style={styles.debugInfo}>
@@ -322,6 +331,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#8E8E93',
     textAlign: 'center',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 100,
+    right: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 8,
+    zIndex: 1000,
+  },
+  fabIcon: {
+    fontSize: 28,
   },
   debugInfo: {
     position: 'absolute',

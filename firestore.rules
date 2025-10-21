@@ -69,6 +69,19 @@ service cloud.firestore {
       }
     }
     
+    // Usernames collection (for username uniqueness enforcement)
+    match /usernames/{username} {
+      // Anyone authenticated can read usernames (for availability checks)
+      allow read: if isAuthenticated();
+      
+      // Only the user referenced in the document can create/update/delete it
+      // This prevents users from reserving usernames for other users
+      allow create: if isAuthenticated() && 
+                       request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && 
+                               resource.data.userId == request.auth.uid;
+    }
+    
     // Deny all other reads/writes by default
     match /{document=**} {
       allow read, write: if false;

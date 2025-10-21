@@ -104,6 +104,7 @@ describe('User Service', () => {
   describe('createUser', () => {
     it('should create a new user successfully', async () => {
       const userData: CreateUserData = {
+        username: 'testuser',
         displayName: 'Test User',
         email: 'test@example.com',
         phoneNumber: '+1234567890',
@@ -111,6 +112,8 @@ describe('User Service', () => {
         bio: 'Test bio',
       };
 
+      // Mock username availability check
+      mockGetDoc.mockResolvedValue({ exists: () => false } as any);
       mockDoc.mockReturnValue({ id: mockUserId } as any);
       mockSetDoc.mockResolvedValue(undefined);
 
@@ -120,6 +123,7 @@ describe('User Service', () => {
       expect(mockSetDoc).toHaveBeenCalled();
       expect(result).toEqual({
         id: mockUserId,
+        username: 'testuser',
         displayName: userData.displayName,
         email: userData.email,
         phoneNumber: userData.phoneNumber,
@@ -135,10 +139,13 @@ describe('User Service', () => {
 
     it('should create user with empty bio if not provided', async () => {
       const userData: CreateUserData = {
+        username: 'testuser2',
         displayName: 'Test User',
         email: 'test@example.com',
       };
 
+      // Mock username availability check
+      mockGetDoc.mockResolvedValue({ exists: () => false } as any);
       mockDoc.mockReturnValue({ id: mockUserId } as any);
       mockSetDoc.mockResolvedValue(undefined);
 
@@ -149,9 +156,13 @@ describe('User Service', () => {
 
     it('should throw error if user creation fails', async () => {
       const userData: CreateUserData = {
+        username: 'testuser3',
         displayName: 'Test User',
         email: 'test@example.com',
       };
+
+      // Mock username availability check
+      mockGetDoc.mockResolvedValue({ exists: () => false } as any);
 
       mockDoc.mockReturnValue({ id: mockUserId } as any);
       mockSetDoc.mockRejectedValue(new Error('Firestore error'));
@@ -165,6 +176,7 @@ describe('User Service', () => {
   describe('getUserById', () => {
     it('should fetch a user by ID successfully', async () => {
       const mockUserData = {
+        username: 'testuser',
         displayName: 'Test User',
         email: 'test@example.com',
         phoneNumber: '+1234567890',
@@ -189,6 +201,7 @@ describe('User Service', () => {
       expect(mockDoc).toHaveBeenCalledWith(db, 'users', mockUserId);
       expect(result).toEqual({
         id: mockUserId,
+        username: mockUserData.username,
         displayName: mockUserData.displayName,
         email: mockUserData.email,
         phoneNumber: mockUserData.phoneNumber,
@@ -226,6 +239,7 @@ describe('User Service', () => {
   describe('getPublicProfile', () => {
     it('should fetch public profile successfully', async () => {
       const mockUserData = {
+        username: 'testuser',
         displayName: 'Test User',
         email: 'test@example.com',
         phoneNumber: '+1234567890',
@@ -249,6 +263,7 @@ describe('User Service', () => {
 
       expect(result).toEqual({
         id: mockUserId,
+        username: mockUserData.username,
         displayName: mockUserData.displayName,
         avatarUrl: mockUserData.avatarUrl,
         bio: mockUserData.bio,
@@ -277,6 +292,7 @@ describe('User Service', () => {
     it('should fetch multiple users by IDs', async () => {
       const userIds = ['user1', 'user2', 'user3'];
       const mockUserData = {
+        username: 'testuser',
         displayName: 'Test User',
         email: 'test@example.com',
         lastSeen: Timestamp.fromMillis(mockTimestamp),
@@ -439,6 +455,7 @@ describe('User Service', () => {
       mockGetDoc.mockResolvedValueOnce({
         exists: () => true,
         data: () => ({
+          username: 'testuser',
           displayName: 'Test User',
           email: 'test@example.com',
           lastSeen: Timestamp.fromMillis(mockTimestamp),
@@ -464,6 +481,7 @@ describe('User Service', () => {
       mockGetDoc.mockResolvedValueOnce({
         exists: () => true,
         data: () => ({
+          username: 'testuser',
           displayName: 'Test User',
           email: 'test@example.com',
           lastSeen: Timestamp.fromMillis(mockTimestamp),
@@ -533,6 +551,7 @@ describe('User Service', () => {
       const searchQuery = 'Test';
       const mockUsers = [
         {
+          username: 'testuser1',
           displayName: 'Test User 1',
           email: 'test1@example.com',
           lastSeen: Timestamp.fromMillis(mockTimestamp),
@@ -543,6 +562,7 @@ describe('User Service', () => {
           bio: '',
         },
         {
+          username: 'testuser2',
           displayName: 'Test User 2',
           email: 'test2@example.com',
           lastSeen: Timestamp.fromMillis(mockTimestamp),
@@ -556,14 +576,10 @@ describe('User Service', () => {
 
       mockCollection.mockReturnValue({} as any);
       mockGetDocs.mockResolvedValue({
-        forEach: (callback: any) => {
-          mockUsers.forEach((userData, index) => {
-            callback({
-              id: `user${index + 1}`,
-              data: () => userData,
-            });
-          });
-        },
+        docs: mockUsers.map((userData, index) => ({
+          id: `user${index + 1}`,
+          data: () => userData,
+        })),
       } as any);
 
       const result = await searchUsers(searchQuery);

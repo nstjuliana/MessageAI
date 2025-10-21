@@ -41,36 +41,16 @@ export default function RootLayout() {
     <AuthProvider>
       <UserProvider>
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack>
-            <Stack.Screen name="index" options={{ headerShown: false }} />
-            <Stack.Screen 
-              name="auth/signup" 
-              options={{ 
-                title: 'Sign Up',
-                headerShown: true,
-              }} 
-            />
-            <Stack.Screen 
-              name="auth/login" 
-              options={{ 
-                title: 'Log In',
-                headerShown: true,
-              }} 
-            />
-            <Stack.Screen 
-              name="auth/profile-setup" 
-              options={{ 
-                title: 'Profile Setup',
-                headerShown: true,
-                headerBackVisible: false,
-              }} 
-            />
-            <Stack.Screen 
-              name="(authenticated)" 
-              options={{ 
-                headerShown: false,
-              }} 
-            />
+          <Stack
+            screenOptions={{
+              headerShown: false, // Hide header for all screens
+            }}
+          >
+            <Stack.Screen name="index" />
+            <Stack.Screen name="auth/signup" />
+            <Stack.Screen name="auth/login" />
+            <Stack.Screen name="auth/profile-setup" />
+            <Stack.Screen name="(authenticated)" />
           </Stack>
           <StatusBar style="auto" />
         </ThemeProvider>

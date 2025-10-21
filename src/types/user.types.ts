@@ -7,6 +7,7 @@ export type UserPresence = 'online' | 'offline' | 'away';
 
 export interface User {
   id: string;
+  username: string; // Unique username (lowercase, alphanumeric + underscore)
   displayName: string;
   phoneNumber?: string;
   email?: string;
@@ -24,6 +25,7 @@ export interface User {
  * Excludes fields that are auto-generated
  */
 export interface CreateUserData {
+  username: string; // Must be unique
   displayName: string;
   phoneNumber?: string;
   email?: string;
@@ -52,6 +54,7 @@ export interface UpdateUserData {
  */
 export interface PublicUserProfile {
   id: string;
+  username: string;
   displayName: string;
   avatarUrl?: string;
   bio?: string;

@@ -56,6 +56,20 @@ export async function signIn(email: string, password: string): Promise<FirebaseU
  */
 export async function logOut(): Promise<void> {
   try {
+    // IMPORTANT: Update presence to offline BEFORE signing out
+    // Otherwise, Firestore will reject the update because user is already logged out
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      // Import updatePresence dynamically to avoid circular dependencies
+      const { updatePresence } = await import('./user.service');
+      try {
+        await updatePresence(currentUser.uid, 'offline');
+      } catch (presenceError) {
+        // Log but don't throw - we still want to sign out even if presence update fails
+        console.warn('Failed to update presence on logout:', presenceError);
+      }
+    }
+    
     await signOut(auth);
   } catch (error: any) {
     console.error('Sign out error:', error);
