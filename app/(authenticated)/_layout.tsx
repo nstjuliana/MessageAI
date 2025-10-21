@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { useNetworkRetry } from '@/hooks/useNetworkRetry';
 import { usePresenceTracking } from '@/hooks/usePresenceTracking';
 
 export default function AuthenticatedLayout() {
@@ -17,6 +18,9 @@ export default function AuthenticatedLayout() {
   
   // Track user presence (online/offline/away) and update lastSeen
   const { resetActivityTimer } = usePresenceTracking();
+  
+  // Enable automatic message retry when network reconnects (app-wide)
+  useNetworkRetry();
 
   // Reset activity timer whenever user navigates to a new screen
   useEffect(() => {

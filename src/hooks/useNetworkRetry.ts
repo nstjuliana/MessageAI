@@ -1,13 +1,14 @@
 /**
  * Network Retry Hook
  * Monitors network state and retries queued messages when online
+ * Should be used once at app level (in authenticated layout)
  */
 
 import { getQueuedMessages, retryFailedMessage } from '@/services/message.service';
 import NetInfo from '@react-native-community/netinfo';
 import { useEffect } from 'react';
 
-export function useNetworkRetry(onRetryComplete?: () => void) {
+export function useNetworkRetry() {
   useEffect(() => {
     let isRetrying = false;
 
@@ -37,10 +38,8 @@ export function useNetworkRetry(onRetryComplete?: () => void) {
               }
             }
             
-            // Notify that retry is complete (allows UI to refresh)
-            if (onRetryComplete) {
-              onRetryComplete();
-            }
+            console.log('✅ All queued messages processed');
+            // Note: Firestore real-time listeners will update the UI automatically
           } else {
             console.log('✅ No queued messages to retry');
           }
@@ -55,6 +54,6 @@ export function useNetworkRetry(onRetryComplete?: () => void) {
     return () => {
       unsubscribe();
     };
-  }, [onRetryComplete]);
+  }, []); // Empty deps - set up once and leave running
 }
 

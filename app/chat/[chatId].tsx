@@ -19,7 +19,6 @@ import {
 } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { useNetworkRetry } from '@/hooks/useNetworkRetry';
 import { usePresenceTracking } from '@/hooks/usePresenceTracking';
 import { getChatById, onChatMessagesSnapshot } from '@/services/chat.service';
 import {
@@ -48,18 +47,6 @@ export default function ChatScreen() {
   
   // Track message statuses for optimistic UI
   const [messageStatuses, setMessageStatuses] = useState<Record<string, MessageStatus>>({});
-  
-  // Reload messages from SQLite (called after retry completes)
-  const reloadMessages = async () => {
-    if (chatId) {
-      console.log('🔄 Reloading messages from SQLite...');
-      const updatedMessages = await getMessagesFromSQLite(chatId);
-      setMessages(updatedMessages);
-    }
-  };
-  
-  // Enable automatic retry when network reconnects
-  useNetworkRetry(reloadMessages);
 
   // Load chat data and messages (SQLite + Firestore)
   useEffect(() => {
