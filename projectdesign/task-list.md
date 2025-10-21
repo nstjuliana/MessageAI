@@ -75,7 +75,7 @@
 43. [x] Implement `chats` table for chat list cache
 44. [x] Implement `chat_participants` table for participant cache
 45. [x] Create database migration system for schema updates
-46. [ ] Test database operations (insert, query, update, delete)
+46. [x] Test database operations (insert, query, update, delete)
 
 ### Deployment Checkpoint #1
 47. [ ] Deploy auth flow to Expo Go
@@ -494,7 +494,7 @@
 358. [x] Write AuthContext integration tests
 359. [x] Write user.service tests (create, update, fetch user)
 360. [ ] Write message.service tests (send, receive, queue)
-361. [ ] Write database tests (SQLite operations)
+361. [x] Write database tests (SQLite operations)
 
 ### Run Tests
 361. [x] Run auth service tests and fix any failures
