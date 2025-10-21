@@ -369,25 +369,37 @@ describe('User Service', () => {
   describe('updatePresence', () => {
     it('should update presence to online', async () => {
       mockDoc.mockReturnValue({ id: mockUserId } as any);
-      mockUpdateDoc.mockResolvedValue(undefined);
+      mockSetDoc.mockResolvedValue(undefined);
 
       await updatePresence(mockUserId, 'online');
 
-      expect(mockUpdateDoc).toHaveBeenCalled();
+      expect(mockSetDoc).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          presence: 'online',
+        }),
+        { merge: true }
+      );
     });
 
     it('should update presence to offline', async () => {
       mockDoc.mockReturnValue({ id: mockUserId } as any);
-      mockUpdateDoc.mockResolvedValue(undefined);
+      mockSetDoc.mockResolvedValue(undefined);
 
       await updatePresence(mockUserId, 'offline');
 
-      expect(mockUpdateDoc).toHaveBeenCalled();
+      expect(mockSetDoc).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          presence: 'offline',
+        }),
+        { merge: true }
+      );
     });
 
     it('should not throw error if update fails (fail silently)', async () => {
       mockDoc.mockReturnValue({ id: mockUserId } as any);
-      mockUpdateDoc.mockRejectedValue(new Error('Firestore error'));
+      mockSetDoc.mockRejectedValue(new Error('Firestore error'));
 
       await expect(updatePresence(mockUserId, 'online')).resolves.not.toThrow();
     });
@@ -396,16 +408,23 @@ describe('User Service', () => {
   describe('updateLastSeen', () => {
     it('should update last seen timestamp', async () => {
       mockDoc.mockReturnValue({ id: mockUserId } as any);
-      mockUpdateDoc.mockResolvedValue(undefined);
+      mockSetDoc.mockResolvedValue(undefined);
 
       await updateLastSeen(mockUserId);
 
-      expect(mockUpdateDoc).toHaveBeenCalled();
+      expect(mockSetDoc).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          lastSeen: expect.anything(),
+          updatedAt: expect.anything(),
+        }),
+        { merge: true }
+      );
     });
 
     it('should not throw error if update fails (fail silently)', async () => {
       mockDoc.mockReturnValue({ id: mockUserId } as any);
-      mockUpdateDoc.mockRejectedValue(new Error('Firestore error'));
+      mockSetDoc.mockRejectedValue(new Error('Firestore error'));
 
       await expect(updateLastSeen(mockUserId)).resolves.not.toThrow();
     });

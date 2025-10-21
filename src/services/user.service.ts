@@ -187,15 +187,18 @@ export async function updatePresence(
 ): Promise<void> {
   try {
     const userRef = doc(db, USERS_COLLECTION, userId);
-    await updateDoc(userRef, {
+    // Use setDoc with merge to create document if it doesn't exist
+    await setDoc(userRef, {
       presence,
       lastSeen: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    });
+    }, { merge: true });
   } catch (error: any) {
     // Permission errors are expected during logout (user already signed out)
     if (error?.code === 'permission-denied' || error?.message?.includes('permission')) {
       console.warn('Could not update presence (user likely logged out):', presence);
+    } else if (error?.code === 'not-found') {
+      console.warn('User document not found, skipping presence update:', userId);
     } else {
       console.error('Error updating presence:', error);
     }
@@ -210,14 +213,17 @@ export async function updatePresence(
 export async function updateLastSeen(userId: string): Promise<void> {
   try {
     const userRef = doc(db, USERS_COLLECTION, userId);
-    await updateDoc(userRef, {
+    // Use setDoc with merge to create document if it doesn't exist
+    await setDoc(userRef, {
       lastSeen: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    });
+    }, { merge: true });
   } catch (error: any) {
     // Permission errors are expected during logout (user already signed out)
     if (error?.code === 'permission-denied' || error?.message?.includes('permission')) {
       console.warn('Could not update last seen (user likely logged out)');
+    } else if (error?.code === 'not-found') {
+      console.warn('User document not found, skipping last seen update:', userId);
     } else {
       console.error('Error updating last seen:', error);
     }

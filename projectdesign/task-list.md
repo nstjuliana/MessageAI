@@ -78,24 +78,24 @@
 46. [x] Test database operations (insert, query, update, delete)
 
 ### Deployment Checkpoint #1
-47. [ ] Deploy auth flow to Expo Go
-48. [ ] Test sign up, login, logout on physical devices
-49. [ ] Verify Firestore user creation works
-50. [ ] Verify SQLite database initializes correctly
+47. [x] Deploy auth flow to Expo Go
+48. [x] Test sign up, login, logout on physical devices
+49. [x] Verify Firestore user creation works
+50. [x] Verify SQLite database initializes correctly
 
 ---
 
 ## Phase 2: MVP - Core Messaging (Hours 5-12)
 
 ### Chat List Screen
-51. [ ] Create `src/types/chat.types.ts` with Chat and Message interfaces
-52. [ ] Build Chat List screen (`app/(tabs)/chats.tsx`)
-53. [ ] Create chat list item component with last message preview
-54. [ ] Implement Firestore listener for user's chats
-55. [ ] Display unread message count badge
-56. [ ] Sort chats by most recent message
-57. [ ] Add pull-to-refresh for chat list
-58. [ ] Handle empty state (no chats yet)
+51. [x] Create `src/types/chat.types.ts` with Chat and Message interfaces
+52. [x] Build Chat List screen (`app/(tabs)/chats.tsx`)
+53. [x] Create chat list item component with last message preview
+54. [x] Implement Firestore listener for user's chats
+55. [ ] Display unread message count badge (TODO: future enhancement)
+56. [x] Sort chats by most recent message
+57. [x] Add pull-to-refresh for chat list
+58. [x] Handle empty state (no chats yet)
 
 ### Start New Chat
 59. [ ] Build user search/selection screen for new chat
@@ -493,7 +493,7 @@
 357. [x] Write auth.service tests (sign up, sign in, logout, etc.)
 358. [x] Write AuthContext integration tests
 359. [x] Write user.service tests (create, update, fetch user)
-360. [ ] Write message.service tests (send, receive, queue)
+360. [x] Write chat.service tests (create chat, messages, welcome chat)
 361. [x] Write database tests (SQLite operations)
 
 ### Run Tests

@@ -6,12 +6,17 @@
 import { db } from '@/config/firebase';
 import type { Chat, CreateChatData, CreateMessageData, Message } from '@/types/chat.types';
 import {
-    collection,
-    doc,
-    getDoc,
-    serverTimestamp,
-    setDoc,
-    updateDoc,
+  collection,
+  doc,
+  getDoc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+  type Unsubscribe,
 } from 'firebase/firestore';
 
 const CHATS_COLLECTION = 'chats';
@@ -239,6 +244,60 @@ Feel free to explore and reach out if you need help! 🚀`;
     });
     // Re-throw the error so it can be caught by the caller
     throw error;
+  }
+}
+
+/**
+ * Listen to user's chats in real-time
+ * @param userId - Current user's ID
+ * @param callback - Called with updated chats array
+ * @returns Unsubscribe function
+ */
+export function onUserChatsSnapshot(
+  userId: string,
+  callback: (chats: Chat[]) => void
+): Unsubscribe {
+  try {
+    // Query chats where user is a participant, sorted by most recent
+    const chatsQuery = query(
+      collection(db, CHATS_COLLECTION),
+      where('participantIds', 'array-contains', userId),
+      orderBy('lastMessageAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(
+      chatsQuery,
+      (snapshot) => {
+        const chats: Chat[] = snapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            type: data.type,
+            participantIds: data.participantIds || [],
+            adminIds: data.adminIds || [],
+            groupName: data.groupName,
+            groupAvatarUrl: data.groupAvatarUrl,
+            lastMessageId: data.lastMessageId,
+            lastMessageText: data.lastMessageText,
+            lastMessageAt: data.lastMessageAt?.toMillis?.() || data.lastMessageAt || 0,
+            createdAt: data.createdAt?.toMillis?.() || data.createdAt || 0,
+            updatedAt: data.updatedAt?.toMillis?.() || data.updatedAt || 0,
+          };
+        });
+
+        console.log(`📱 Received ${chats.length} chats for user ${userId}`);
+        callback(chats);
+      },
+      (error) => {
+        console.error('Error listening to chats:', error);
+        callback([]); // Return empty array on error
+      }
+    );
+
+    return unsubscribe;
+  } catch (error) {
+    console.error('Error setting up chats listener:', error);
+    return () => {}; // Return no-op unsubscribe function
   }
 }
 
