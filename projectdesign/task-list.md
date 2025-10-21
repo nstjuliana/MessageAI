@@ -65,8 +65,8 @@
 35. [x] Build profile setup screen (display name, optional avatar)
 36. [x] Create `src/services/user.service.ts` for user CRUD operations
 37. [x] Implement profile creation on first sign up
-38. [ ] Add user presence tracking (online/offline/away)
-39. [ ] Update user's `lastSeen` timestamp on app activity
+38. [x] Add user presence tracking (online/offline/away)
+39. [x] Update user's `lastSeen` timestamp on app activity
 
 ### SQLite Local Database
 40. [ ] Create `src/database/schema.ts` with SQLite table definitions
