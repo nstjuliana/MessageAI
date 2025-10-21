@@ -15,18 +15,21 @@ import {
 } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { usePresenceTracking } from '@/hooks/usePresenceTracking';
 import { findOrCreateDMChat } from '@/services/chat.service';
 import { searchUsers } from '@/services/user.service';
 import type { PublicUserProfile } from '@/types/user.types';
 
 export default function NewChatScreen() {
   const { user } = useAuth();
+  const { resetActivityTimer } = usePresenceTracking();
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<PublicUserProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
 
   const handleSearch = async (term: string) => {
+    resetActivityTimer();
     setSearchTerm(term);
 
     if (!term || term.trim().length === 0) {
@@ -51,6 +54,7 @@ export default function NewChatScreen() {
   const handleSelectUser = async (selectedUser: PublicUserProfile) => {
     if (!user) return;
 
+    resetActivityTimer();
     setCreating(true);
     try {
       console.log(`Creating/finding chat with ${selectedUser.displayName}...`);

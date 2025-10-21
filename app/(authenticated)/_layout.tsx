@@ -4,17 +4,26 @@
  * Also handles presence tracking (online/offline/away status)
  */
 
-import { Redirect, Stack } from 'expo-router';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { Redirect, Stack, usePathname } from 'expo-router';
+import { useEffect } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { usePresenceTracking } from '@/hooks/usePresenceTracking';
 
 export default function AuthenticatedLayout() {
   const { user, loading } = useAuth();
+  const pathname = usePathname();
   
   // Track user presence (online/offline/away) and update lastSeen
-  usePresenceTracking();
+  const { resetActivityTimer } = usePresenceTracking();
+
+  // Reset activity timer whenever user navigates to a new screen
+  useEffect(() => {
+    if (user) {
+      resetActivityTimer();
+    }
+  }, [pathname, user]);
 
   // Show loading spinner while checking authentication
   if (loading) {
@@ -32,24 +41,26 @@ export default function AuthenticatedLayout() {
 
   // User is authenticated, render the protected screens
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false, // Hide header for all screens by default
-      }}
-    >
-      <Stack.Screen 
-        name="chats" 
-        options={{ 
-          headerShown: false,
-        }} 
-      />
-      <Stack.Screen 
-        name="new-chat" 
-        options={{ 
-          headerShown: false,
-        }} 
-      />
-    </Stack>
+    <Pressable style={{ flex: 1 }} onPress={resetActivityTimer}>
+      <Stack
+        screenOptions={{
+          headerShown: false, // Hide header for all screens by default
+        }}
+      >
+        <Stack.Screen 
+          name="chats" 
+          options={{ 
+            headerShown: false,
+          }} 
+        />
+        <Stack.Screen 
+          name="new-chat" 
+          options={{ 
+            headerShown: false,
+          }} 
+        />
+      </Stack>
+    </Pressable>
   );
 }
 

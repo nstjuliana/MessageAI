@@ -46,7 +46,7 @@ export function usePresenceTracking() {
           console.error('Failed to set away status:', error);
         });
       }
-    }, 300000); // 5 minutes
+    }, 10000); // 5 minutes (300000ms)
   };
 
   // Update lastSeen every 30 seconds when active
@@ -148,6 +148,11 @@ export function usePresenceTracking() {
   // Reset away timer on user activity (could be triggered by touch events)
   const resetActivityTimer = () => {
     if (!user) return;
+    
+    // Set user back to online if they were away
+    updatePresence(user.uid, 'online').catch((error) => {
+      console.error('Failed to set online status on activity:', error);
+    });
     
     // Clear existing timer and start new one
     startAwayTimer();

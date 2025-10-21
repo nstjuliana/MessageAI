@@ -17,6 +17,7 @@ import {
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useUser } from '@/contexts/UserContext';
+import { usePresenceTracking } from '@/hooks/usePresenceTracking';
 import { onUserChatsSnapshot } from '@/services/chat.service';
 import { getUsersByIds } from '@/services/user.service';
 import type { Chat } from '@/types/chat.types';
@@ -25,6 +26,7 @@ import type { User } from '@/types/user.types';
 export default function ChatsScreen() {
   const { user, logOut } = useAuth();
   const { userProfile } = useUser();
+  const { resetActivityTimer } = usePresenceTracking();
   const [chats, setChats] = useState<Chat[]>([]);
   const [chatParticipants, setChatParticipants] = useState<Record<string, User>>({});
   const [loading, setLoading] = useState(true);
@@ -128,6 +130,7 @@ export default function ChatsScreen() {
       <TouchableOpacity
         style={styles.chatItem}
         onPress={() => {
+          resetActivityTimer();
           // TODO: Navigate to chat screen
           console.log('Open chat:', item.id);
         }}
@@ -206,7 +209,10 @@ export default function ChatsScreen() {
       {/* New Chat FAB */}
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => router.push('/(authenticated)/new-chat')}
+        onPress={() => {
+          resetActivityTimer();
+          router.push('/(authenticated)/new-chat');
+        }}
       >
         <Text style={styles.fabIcon}>✏️</Text>
       </TouchableOpacity>
