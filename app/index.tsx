@@ -1,14 +1,30 @@
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { httpsCallable } from 'firebase/functions';
 import { useState } from 'react';
 import { ActivityIndicator, Button, StyleSheet, Text, View } from 'react-native';
 
 import { auth, db, functions } from '@/config/firebase';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function HomeScreen() {
+  const { user, loading } = useAuth();
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<string>('');
+
+  // Show loading while checking auth state
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
+
+  // Redirect to chats if already logged in
+  if (user) {
+    return <Redirect href="/(authenticated)/chats" />;
+  }
 
   const testFirebaseConnection = async () => {
     setTesting(true);
@@ -67,7 +83,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>MessageAI</Text>
+      <Text style={styles.title}>WhatsApp</Text>
       <Text style={styles.subtitle}>Chat List Coming Soon</Text>
       
       <View style={styles.authSection}>

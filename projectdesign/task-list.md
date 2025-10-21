@@ -54,11 +54,11 @@
 26. [x] Create `src/services/auth.service.ts` with Firebase Auth methods
 27. [x] Build Sign Up screen (`app/auth/signup.tsx`) with email/password
 28. [x] Build Login screen (`app/auth/login.tsx`) with email/password
-29. [ ] Implement authentication state management (Context or Zustand)
-30. [ ] Create protected route wrapper for authenticated screens
-31. [ ] Add logout functionality
+29. [x] Implement authentication state management (Context or Zustand)
+30. [x] Create protected route wrapper for authenticated screens
+31. [x] Add logout functionality
 32. [x] Handle authentication errors and display to user
-33. [ ] Persist auth state across app restarts
+33. [x] Persist auth state across app restarts
 
 ### User Profile Setup
 34. [ ] Create `users` collection schema in Firestore
@@ -491,9 +491,10 @@
 
 ### Service Tests
 357. [x] Write auth.service tests (sign up, sign in, logout, etc.)
-358. [ ] Write user.service tests (create, update, fetch user)
-359. [ ] Write message.service tests (send, receive, queue)
-360. [ ] Write database tests (SQLite operations)
+358. [x] Write AuthContext integration tests
+359. [ ] Write user.service tests (create, update, fetch user)
+360. [ ] Write message.service tests (send, receive, queue)
+361. [ ] Write database tests (SQLite operations)
 
 ### Run Tests
 361. [x] Run auth service tests and fix any failures

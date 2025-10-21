@@ -13,9 +13,10 @@ import {
     View,
 } from 'react-native';
 
-import { signUp } from '@/services/auth.service';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function SignUpScreen() {
+  const { signUp } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -69,21 +70,9 @@ export default function SignUpScreen() {
       // Sign up user
       await signUp(email.trim(), password);
 
-      // Success - navigate to profile setup or main app
-      Alert.alert(
-        'Success!',
-        'Account created successfully. Please set up your profile.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // TODO: Navigate to profile setup screen when created
-              // For now, just show success
-              router.replace('/');
-            },
-          },
-        ]
-      );
+      // Success - navigate to main app
+      // Context will automatically update user state
+      router.replace('/(authenticated)/chats');
     } catch (error: any) {
       // Show error alert
       Alert.alert('Sign Up Failed', error.message || 'An error occurred during sign up');

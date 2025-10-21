@@ -13,9 +13,10 @@ import {
     View,
 } from 'react-native';
 
-import { signIn } from '@/services/auth.service';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginScreen() {
+  const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -59,7 +60,8 @@ export default function LoginScreen() {
       await signIn(email.trim(), password);
 
       // Success - navigate to main app
-      router.replace('/');
+      // Context will automatically update user state
+      router.replace('/(authenticated)/chats');
     } catch (error: any) {
       // Show error alert
       Alert.alert('Login Failed', error.message || 'An error occurred during login');
