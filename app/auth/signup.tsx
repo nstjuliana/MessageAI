@@ -1,16 +1,16 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -70,9 +70,9 @@ export default function SignUpScreen() {
       // Sign up user
       await signUp(email.trim(), password);
 
-      // Success - navigate to main app
-      // Context will automatically update user state
-      router.replace('/(authenticated)/chats');
+      // Success - navigate to profile setup
+      // User needs to complete their profile before accessing the app
+      router.replace('/auth/profile-setup');
     } catch (error: any) {
       // Show error alert
       Alert.alert('Sign Up Failed', error.message || 'An error occurred during sign up');

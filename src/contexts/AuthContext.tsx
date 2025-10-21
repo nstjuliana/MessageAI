@@ -8,10 +8,15 @@ import { User as FirebaseUser } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 import { logOut, onAuthStateChange, signIn, signUp } from '@/services/auth.service';
+import { onUserSnapshot } from '@/services/user.service';
+import type { User } from '@/types/user.types';
 
 interface AuthContextType {
   // Current authenticated user (null if not logged in)
   user: FirebaseUser | null;
+  
+  // User profile from Firestore (null if not loaded yet)
+  userProfile: User | null;
   
   // Loading state (true while checking authentication status)
   loading: boolean;
@@ -31,6 +36,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [userProfile, setUserProfile] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Listen to Firebase auth state changes
@@ -43,6 +49,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Cleanup listener on unmount
     return unsubscribe;
   }, []);
+
+  // Listen to Firestore user profile changes
+  useEffect(() => {
+    if (!user) {
+      setUserProfile(null);
+      return;
+    }
+
+    // Subscribe to user profile updates
+    const unsubscribe = onUserSnapshot(user.uid, (profile) => {
+      setUserProfile(profile);
+    });
+
+    // Cleanup listener on unmount or user change
+    return unsubscribe;
+  }, [user]);
 
   // Sign up function
   const handleSignUp = async (email: string, password: string): Promise<FirebaseUser> => {
@@ -68,6 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const value: AuthContextType = {
     user,
+    userProfile,
     loading,
     signUp: handleSignUp,
     signIn: handleSignIn,
@@ -90,4 +113,5 @@ export function useAuth(): AuthContextType {
   
   return context;
 }
+
 

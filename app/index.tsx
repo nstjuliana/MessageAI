@@ -83,7 +83,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>WhatsApp</Text>
+      <Text style={styles.title}>MessageAI</Text>
       <Text style={styles.subtitle}>Chat List Coming Soon</Text>
       
       <View style={styles.authSection}>

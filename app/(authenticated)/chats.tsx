@@ -8,23 +8,28 @@ import { Button, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function ChatsScreen() {
-  const { user, logOut } = useAuth();
+  const { user, userProfile, logOut } = useAuth();
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Chat List</Text>
-      <Text style={styles.subtitle}>Welcome, {user?.email}!</Text>
+      <Text style={styles.subtitle}>
+        Welcome, {userProfile?.displayName || user?.email || 'User'}!
+      </Text>
       <Text style={styles.info}>Chat functionality coming soon...</Text>
       
       <View style={styles.userInfo}>
-        <Text style={styles.label}>User ID:</Text>
-        <Text style={styles.value}>{user?.uid}</Text>
+        <Text style={styles.label}>Display Name:</Text>
+        <Text style={styles.value}>{userProfile?.displayName || 'Not set'}</Text>
         
         <Text style={styles.label}>Email:</Text>
         <Text style={styles.value}>{user?.email}</Text>
         
-        <Text style={styles.label}>Email Verified:</Text>
-        <Text style={styles.value}>{user?.emailVerified ? 'Yes' : 'No'}</Text>
+        <Text style={styles.label}>Status:</Text>
+        <Text style={styles.value}>{userProfile?.presence || 'Unknown'}</Text>
+        
+        <Text style={styles.label}>User ID:</Text>
+        <Text style={styles.value}>{user?.uid}</Text>
       </View>
       
       <Button title="Log Out" onPress={logOut} color="#FF3B30" />
@@ -76,4 +81,5 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
   },
 });
+
 

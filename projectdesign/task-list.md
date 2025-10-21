@@ -61,10 +61,10 @@
 33. [x] Persist auth state across app restarts
 
 ### User Profile Setup
-34. [ ] Create `users` collection schema in Firestore
-35. [ ] Build profile setup screen (display name, optional avatar)
-36. [ ] Create `src/services/user.service.ts` for user CRUD operations
-37. [ ] Implement profile creation on first sign up
+34. [x] Create `users` collection schema in Firestore
+35. [x] Build profile setup screen (display name, optional avatar)
+36. [x] Create `src/services/user.service.ts` for user CRUD operations
+37. [x] Implement profile creation on first sign up
 38. [ ] Add user presence tracking (online/offline/away)
 39. [ ] Update user's `lastSeen` timestamp on app activity
 
@@ -492,7 +492,7 @@
 ### Service Tests
 357. [x] Write auth.service tests (sign up, sign in, logout, etc.)
 358. [x] Write AuthContext integration tests
-359. [ ] Write user.service tests (create, update, fetch user)
+359. [x] Write user.service tests (create, update, fetch user)
 360. [ ] Write message.service tests (send, receive, queue)
 361. [ ] Write database tests (SQLite operations)
 
