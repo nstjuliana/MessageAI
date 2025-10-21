@@ -39,9 +39,20 @@ export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
     } else if (currentVersion < DATABASE_VERSION) {
       // Migration needed
       console.log(`Migrating database from v${currentVersion} to v${DATABASE_VERSION}`);
-      await migrateDatabase(currentVersion, DATABASE_VERSION);
-      await setDatabaseVersion(DATABASE_VERSION);
-      console.log('Database migration completed');
+      try {
+        await migrateDatabase(currentVersion, DATABASE_VERSION);
+        await setDatabaseVersion(DATABASE_VERSION);
+        console.log('Database migration completed');
+      } catch (migrationError) {
+        console.error('Migration failed, attempting to rebuild database:', migrationError);
+        // If migration fails, drop and recreate (development fallback)
+        await db.closeAsync();
+        await SQLite.deleteDatabaseAsync(DATABASE_NAME);
+        db = await SQLite.openDatabaseAsync(DATABASE_NAME);
+        await createTables();
+        await setDatabaseVersion(DATABASE_VERSION);
+        console.log('Database rebuilt successfully');
+      }
     } else {
       console.log('Database is up to date');
     }
@@ -143,11 +154,94 @@ async function migrateDatabase(fromVersion: number, toVersion: number): Promise<
       await createTables();
     }
     
-    // Future migrations go here
-    // Example:
-    // if (fromVersion < 2 && toVersion >= 2) {
-    //   await db.execAsync('ALTER TABLE messages ADD COLUMN isDeleted INTEGER DEFAULT 0');
-    // }
+    // Version 2 migrations - Add editedAt column
+    if (fromVersion < 2 && toVersion >= 2) {
+      console.log('Migrating to version 2: Adding editedAt column to messages table');
+      try {
+        await db.execAsync('ALTER TABLE messages ADD COLUMN editedAt INTEGER');
+        console.log('✅ Added editedAt column to messages table');
+      } catch (error: any) {
+        if (error.message?.includes('duplicate column name')) {
+          console.log('⚠️ editedAt column already exists, skipping...');
+        } else {
+          throw error;
+        }
+      }
+    }
+    
+    // Version 3 migrations - Ensure editedAt column exists (failsafe)
+    if (fromVersion < 3 && toVersion >= 3) {
+      console.log('Migrating to version 3: Ensuring editedAt column exists');
+      try {
+        // Try to add the column (will fail if it exists)
+        await db.execAsync('ALTER TABLE messages ADD COLUMN editedAt INTEGER');
+        console.log('✅ Added editedAt column to messages table');
+      } catch (error: any) {
+        // Check if it's a "duplicate column" error (which is fine)
+        if (error.message?.includes('duplicate column name') || 
+            error.message?.includes('already exists')) {
+          console.log('✅ editedAt column already exists');
+        } else {
+          // Some other error - log and continue
+          console.error('⚠️ Could not add editedAt column:', error.message);
+          console.log('Attempting to rebuild messages table...');
+          
+          // As a last resort, rebuild the messages table
+          await db.execAsync(`
+            BEGIN TRANSACTION;
+            
+            -- Create temporary table with new schema
+            CREATE TABLE messages_new (
+              id TEXT PRIMARY KEY,
+              chatId TEXT NOT NULL,
+              senderId TEXT NOT NULL,
+              text TEXT,
+              mediaUrl TEXT,
+              mediaMime TEXT,
+              replyToId TEXT,
+              status TEXT NOT NULL CHECK(status IN ('sending', 'sent', 'delivered', 'read', 'failed')),
+              createdAt INTEGER NOT NULL,
+              edited INTEGER DEFAULT 0,
+              editedAt INTEGER,
+              localId TEXT UNIQUE,
+              queuedAt INTEGER,
+              retryCount INTEGER DEFAULT 0,
+              lastRetryAt INTEGER,
+              syncedToFirestore INTEGER DEFAULT 0,
+              FOREIGN KEY (chatId) REFERENCES chats(id) ON DELETE CASCADE
+            );
+            
+            -- Copy existing data (without editedAt)
+            INSERT INTO messages_new (
+              id, chatId, senderId, text, mediaUrl, mediaMime, replyToId,
+              status, createdAt, edited, localId, queuedAt, retryCount,
+              lastRetryAt, syncedToFirestore
+            )
+            SELECT 
+              id, chatId, senderId, text, mediaUrl, mediaMime, replyToId,
+              status, createdAt, edited, localId, queuedAt, retryCount,
+              lastRetryAt, syncedToFirestore
+            FROM messages;
+            
+            -- Drop old table
+            DROP TABLE messages;
+            
+            -- Rename new table
+            ALTER TABLE messages_new RENAME TO messages;
+            
+            -- Recreate indexes
+            CREATE INDEX IF NOT EXISTS idx_messages_chatId ON messages(chatId);
+            CREATE INDEX IF NOT EXISTS idx_messages_createdAt ON messages(createdAt DESC);
+            CREATE INDEX IF NOT EXISTS idx_messages_status ON messages(status);
+            CREATE INDEX IF NOT EXISTS idx_messages_queue ON messages(queuedAt) WHERE queuedAt IS NOT NULL;
+            CREATE INDEX IF NOT EXISTS idx_messages_synced ON messages(syncedToFirestore);
+            
+            COMMIT;
+          `);
+          console.log('✅ Messages table rebuilt with editedAt column');
+        }
+      }
+    }
     
     console.log('Migration completed successfully');
   } catch (error) {
@@ -181,6 +275,33 @@ export async function dropAllTables(): Promise<void> {
     console.log('All tables dropped');
   } catch (error) {
     console.error('Error dropping tables:', error);
+    throw error;
+  }
+}
+
+/**
+ * Force rebuild database (for development)
+ * Deletes the database file and recreates with latest schema
+ */
+export async function rebuildDatabase(): Promise<void> {
+  try {
+    console.log('🔄 Rebuilding database...');
+    
+    // Close existing connection
+    if (db) {
+      await db.closeAsync();
+      db = null;
+    }
+    
+    // Delete database file
+    await SQLite.deleteDatabaseAsync(DATABASE_NAME);
+    console.log('✅ Old database deleted');
+    
+    // Reinitialize with new schema
+    await initDatabase();
+    console.log('✅ Database rebuilt successfully!');
+  } catch (error) {
+    console.error('❌ Failed to rebuild database:', error);
     throw error;
   }
 }

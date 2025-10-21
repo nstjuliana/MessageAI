@@ -24,6 +24,7 @@ export const CREATE_MESSAGES_TABLE = `
     status TEXT NOT NULL CHECK(status IN ('sending', 'sent', 'delivered', 'read', 'failed')),
     createdAt INTEGER NOT NULL,
     edited INTEGER DEFAULT 0,
+    editedAt INTEGER,
     
     -- Offline queue fields
     localId TEXT UNIQUE,
@@ -188,7 +189,7 @@ export const ALL_TABLES = [
  * Database version
  * Increment this when schema changes to trigger migrations
  */
-export const DATABASE_VERSION = 1;
+export const DATABASE_VERSION = 3;
 
 /**
  * Database name

@@ -258,7 +258,7 @@ export default function ChatsScreen() {
         <Text style={styles.fabIcon}>✏️</Text>
       </TouchableOpacity>
 
-      {/* Debug info - remove later */}
+      {/* Debug info */}
       {__DEV__ && (
         <View style={styles.debugInfo}>
           <Text style={styles.debugText}>

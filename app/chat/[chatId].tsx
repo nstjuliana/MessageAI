@@ -19,10 +19,16 @@ import {
 } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { useNetworkRetry } from '@/hooks/useNetworkRetry';
 import { usePresenceTracking } from '@/hooks/usePresenceTracking';
-import { getChatById, onChatMessagesSnapshot, sendMessage } from '@/services/chat.service';
+import { getChatById, onChatMessagesSnapshot } from '@/services/chat.service';
+import {
+  getMessagesFromSQLite,
+  sendMessageOptimistic,
+  syncMessageToSQLite,
+} from '@/services/message.service';
 import { getUsersByIds } from '@/services/user.service';
-import type { Chat, Message } from '@/types/chat.types';
+import type { Chat, Message, MessageStatus } from '@/types/chat.types';
 import type { PublicUserProfile } from '@/types/user.types';
 
 export default function ChatScreen() {
@@ -39,8 +45,23 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   
   const flatListRef = useRef<FlatList>(null);
+  
+  // Track message statuses for optimistic UI
+  const [messageStatuses, setMessageStatuses] = useState<Record<string, MessageStatus>>({});
+  
+  // Reload messages from SQLite (called after retry completes)
+  const reloadMessages = async () => {
+    if (chatId) {
+      console.log('🔄 Reloading messages from SQLite...');
+      const updatedMessages = await getMessagesFromSQLite(chatId);
+      setMessages(updatedMessages);
+    }
+  };
+  
+  // Enable automatic retry when network reconnects
+  useNetworkRetry(reloadMessages);
 
-  // Load chat data and messages from Firestore
+  // Load chat data and messages (SQLite + Firestore)
   useEffect(() => {
     if (!chatId || !user) {
       setLoading(false);
@@ -48,21 +69,31 @@ export default function ChatScreen() {
     }
 
     let unsubscribeMessages: (() => void) | undefined;
+    let messagesFromSQLite: Message[] = [];
+    let messagesFromFirestore: Message[] = [];
 
     const loadChat = async () => {
       try {
         setLoading(true);
 
-        // 1. Load chat metadata
-        const chatData = await getChatById(chatId);
+        // 1. Load messages from SQLite FIRST (instant load - no network)
+        messagesFromSQLite = await getMessagesFromSQLite(chatId);
+        setMessages(messagesFromSQLite);
+        setLoading(false); // Stop showing spinner immediately
+
+        // 2. Load chat metadata and participants in parallel (background)
+        const [chatData] = await Promise.all([
+          getChatById(chatId),
+          // Load participants after we have chat data
+        ]);
+        
         if (!chatData) {
           console.error('Chat not found');
-          setLoading(false);
           return;
         }
         setChat(chatData);
 
-        // 2. Load participant profiles
+        // 3. Load participant profiles (background)
         const participantIds = chatData.participantIds.filter(id => id !== user.uid);
         if (participantIds.length > 0) {
           const profiles = await getUsersByIds(participantIds);
@@ -81,10 +112,30 @@ export default function ChatScreen() {
           setParticipants(profilesMap);
         }
 
-        // 3. Listen to messages in real-time
-        unsubscribeMessages = onChatMessagesSnapshot(chatId, (newMessages) => {
-          setMessages(newMessages);
-          setLoading(false);
+        // 4. Listen to messages in real-time from Firestore
+        unsubscribeMessages = onChatMessagesSnapshot(chatId, async (firestoreMessages) => {
+          messagesFromFirestore = firestoreMessages;
+          
+          // Sync Firestore messages to SQLite
+          for (const message of firestoreMessages) {
+            await syncMessageToSQLite(message);
+          }
+          
+          // Merge messages: Use Map to deduplicate by ID
+          const messageMap = new Map<string, Message>();
+          
+          // Add SQLite messages first
+          messagesFromSQLite.forEach(msg => messageMap.set(msg.id, msg));
+          
+          // Override with Firestore messages (they're the source of truth)
+          firestoreMessages.forEach(msg => messageMap.set(msg.id, msg));
+          
+          // Convert to array and sort by createdAt
+          const mergedMessages = Array.from(messageMap.values()).sort(
+            (a, b) => a.createdAt - b.createdAt
+          );
+          
+          setMessages(mergedMessages);
         });
       } catch (error) {
         console.error('Error loading chat:', error);
@@ -111,8 +162,29 @@ export default function ChatScreen() {
     setSending(true);
 
     try {
-      await sendMessage(chatId, user.uid, textToSend);
-      // Message will appear via the real-time listener
+      // Send message with optimistic UI
+      const message = await sendMessageOptimistic(
+        {
+          chatId,
+          senderId: user.uid,
+          text: textToSend,
+        },
+        // Callback for status changes
+        (messageId, status) => {
+          console.log(`Message ${messageId} status changed to ${status}`);
+          setMessageStatuses(prev => ({ ...prev, [messageId]: status }));
+        }
+      );
+      
+      // Add message to UI immediately (optimistic)
+      setMessages(prev => [...prev, message]);
+      
+      // Scroll to bottom
+      setTimeout(() => {
+        if (flatListRef.current) {
+          flatListRef.current.scrollToEnd({ animated: true });
+        }
+      }, 100);
     } catch (error) {
       console.error('Error sending message:', error);
       // Restore message text if send failed
@@ -146,6 +218,9 @@ export default function ChatScreen() {
     const isSent = item.senderId === user?.uid;
     const sender = participants[item.senderId];
     
+    // Get current status (use local state if available, otherwise use message status)
+    const currentStatus = messageStatuses[item.id] || item.status;
+    
     return (
       <View style={[styles.messageContainer, isSent ? styles.sentContainer : styles.receivedContainer]}>
         {/* Avatar for received messages in groups */}
@@ -170,13 +245,42 @@ export default function ChatScreen() {
             <Text style={[styles.messageText, isSent ? styles.sentText : styles.receivedText]}>
               {item.text}
             </Text>
-            <Text style={[styles.timestamp, isSent ? styles.sentTimestamp : styles.receivedTimestamp]}>
-              {formatTimestamp(item.createdAt)}
-            </Text>
+            <View style={styles.messageFooter}>
+              <Text style={[styles.timestamp, isSent ? styles.sentTimestamp : styles.receivedTimestamp]}>
+                {formatTimestamp(item.createdAt)}
+              </Text>
+              {/* Status indicator for sent messages */}
+              {isSent && (
+                <Text style={[
+                  styles.statusIndicator,
+                  currentStatus === 'failed' && styles.statusFailed,
+                  currentStatus === 'sending' && styles.statusQueued,
+                ]}>
+                  {getStatusIndicator(currentStatus)}
+                </Text>
+              )}
+            </View>
           </View>
         </View>
       </View>
     );
+  };
+  
+  const getStatusIndicator = (status: MessageStatus): string => {
+    switch (status) {
+      case 'sending':
+        return '⏱'; // Clock for queued/sending
+      case 'sent':
+        return '✓'; // Single checkmark
+      case 'delivered':
+        return '✓✓'; // Double checkmark
+      case 'read':
+        return '✓✓'; // Blue double checkmark (styled separately)
+      case 'failed':
+        return '!'; // Exclamation mark
+      default:
+        return '';
+    }
   };
 
   const formatTimestamp = (timestamp: number): string => {
@@ -415,17 +519,32 @@ const styles = StyleSheet.create({
   receivedText: {
     color: '#000',
   },
+  messageFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 4,
+    gap: 4,
+  },
   timestamp: {
     fontSize: 11,
-    marginTop: 4,
   },
   sentTimestamp: {
     color: 'rgba(255, 255, 255, 0.7)',
-    textAlign: 'right',
   },
   receivedTimestamp: {
     color: '#8E8E93',
-    textAlign: 'right',
+  },
+  statusIndicator: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.7)',
+    marginLeft: 4,
+  },
+  statusFailed: {
+    color: '#FF3B30', // Red for failed
+  },
+  statusQueued: {
+    color: 'rgba(255, 255, 255, 0.5)', // Dimmer for queued
   },
   inputContainer: {
     flexDirection: 'row',

@@ -114,15 +114,15 @@
 70. [x] Add pull-to-refresh for loading older messages
 
 ### Send Message (Optimistic UI)
-71. [ ] Create `src/services/message.service.ts`
-72. [ ] Implement optimistic UI: display message immediately
-73. [ ] Generate local message ID (UUID)
-74. [ ] Insert message into SQLite with status "sending"
-75. [ ] Attempt Firestore write to `chats/{chatId}/messages`
-76. [ ] Update message status to "sent" on success
-77. [ ] Mark as "failed" on error and add to retry queue
-78. [ ] Update chat's `lastMessage` fields in Firestore
-79. [ ] Show message status indicator (sending/sent/failed)
+71. [x] Create `src/services/message.service.ts`
+72. [x] Implement optimistic UI: display message immediately
+73. [x] Generate local message ID (UUID)
+74. [x] Insert message into SQLite with status "sending"
+75. [x] Attempt Firestore write to `chats/{chatId}/messages`
+76. [x] Update message status to "sent" on success
+77. [x] Mark as "failed" on error and add to retry queue
+78. [x] Update chat's `lastMessage` fields in Firestore
+79. [x] Show message status indicator (sending/sent/failed)
 
 ### Receive Messages (Real-time)
 80. [ ] Set up Firestore listener for new messages in chat
