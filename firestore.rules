@@ -1,0 +1,78 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      // Anyone authenticated can read any user profile (for search, chat participants, etc.)
+      allow read: if isAuthenticated();
+      
+      // Users can create/update/delete their own profile
+      // Special case: allow creating messageai-system user (bot)
+      allow create: if isOwner(userId) || 
+                       (isAuthenticated() && userId == 'messageai-system');
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+    
+    // Chats collection
+    match /chats/{chatId} {
+      // Users can read chats they're a participant in
+      allow read: if isAuthenticated() && 
+                     request.auth.uid in resource.data.participantIds;
+      
+      // Users can create chats if they're included as a participant
+      allow create: if isAuthenticated() && 
+                       request.auth.uid in request.resource.data.participantIds;
+      
+      // Participants can update chat metadata
+      allow update: if isAuthenticated() && 
+                       request.auth.uid in resource.data.participantIds;
+      
+      // Only participants can delete chats
+      allow delete: if isAuthenticated() && 
+                       request.auth.uid in resource.data.participantIds;
+      
+      // Messages subcollection
+      match /messages/{messageId} {
+        // Participants can read messages in their chats
+        allow read: if isAuthenticated() && 
+                       request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
+        
+        // Participants can create messages in their chats
+        allow create: if isAuthenticated() && 
+                         request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
+        
+        // Message sender can update/delete their own messages
+        allow update, delete: if isAuthenticated() && 
+                                 request.auth.uid == resource.data.senderId;
+      }
+      
+      // Read receipts subcollection
+      match /readReceipts/{userId} {
+        // Participants can read all read receipts in their chats
+        allow read: if isAuthenticated() && 
+                       request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
+        
+        // Users can only write their own read receipt
+        allow write: if isOwner(userId);
+      }
+    }
+    
+    // Deny all other reads/writes by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

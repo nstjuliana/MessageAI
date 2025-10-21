@@ -192,8 +192,13 @@ export async function updatePresence(
       lastSeen: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-  } catch (error) {
-    console.error('Error updating presence:', error);
+  } catch (error: any) {
+    // Permission errors are expected during logout (user already signed out)
+    if (error?.code === 'permission-denied' || error?.message?.includes('permission')) {
+      console.warn('Could not update presence (user likely logged out):', presence);
+    } else {
+      console.error('Error updating presence:', error);
+    }
     // Don't throw error for presence updates - fail silently
   }
 }
@@ -209,8 +214,13 @@ export async function updateLastSeen(userId: string): Promise<void> {
       lastSeen: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-  } catch (error) {
-    console.error('Error updating last seen:', error);
+  } catch (error: any) {
+    // Permission errors are expected during logout (user already signed out)
+    if (error?.code === 'permission-denied' || error?.message?.includes('permission')) {
+      console.warn('Could not update last seen (user likely logged out)');
+    } else {
+      console.error('Error updating last seen:', error);
+    }
     // Don't throw error for last seen updates - fail silently
   }
 }

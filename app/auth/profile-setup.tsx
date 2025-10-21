@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { createWelcomeChat } from '@/services/chat.service';
 import { createUser } from '@/services/user.service';
 
 export default function ProfileSetupScreen() {
@@ -61,6 +62,12 @@ export default function ProfileSetupScreen() {
         displayName: displayName.trim(),
         email: user.email || undefined,
         bio: bio.trim() || undefined,
+      });
+
+      // Create welcome chat with MessageAI (non-blocking)
+      createWelcomeChat(user.uid, displayName.trim()).catch((error) => {
+        console.warn('Failed to create welcome chat:', error);
+        // Don't block user if welcome chat fails
       });
 
       // Success - navigate to main app

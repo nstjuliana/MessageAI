@@ -3,14 +3,65 @@
  * Main chat list screen - only accessible when authenticated
  */
 
-import { Button, StyleSheet, Text, View } from 'react-native';
+import { Alert, Button, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useUser } from '@/contexts/UserContext';
+import { getDatabaseStats } from '@/database/database';
+import { createWelcomeChat } from '@/services/chat.service';
 
 export default function ChatsScreen() {
   const { user, logOut } = useAuth();
   const { userProfile } = useUser();
+
+  const handleTestDatabase = async () => {
+    try {
+      const stats = await getDatabaseStats();
+      Alert.alert(
+        '✅ Database Working!',
+        `Database is initialized and working correctly!\n\n` +
+        `📊 Statistics:\n` +
+        `• Messages: ${stats.messageCount}\n` +
+        `• Chats: ${stats.chatCount}\n` +
+        `• Participants: ${stats.participantCount}\n` +
+        `• Size: ${stats.databaseSize}`,
+        [{ text: 'OK' }]
+      );
+      console.log('Database stats:', stats);
+    } catch (error: any) {
+      Alert.alert(
+        '❌ Database Error',
+        `Failed to access database:\n${error.message}`,
+        [{ text: 'OK' }]
+      );
+      console.error('Database test failed:', error);
+    }
+  };
+
+  const handleCreateWelcomeChat = async () => {
+    if (!user || !userProfile?.displayName) {
+      Alert.alert('Error', 'User not fully loaded');
+      return;
+    }
+
+    try {
+      console.log('Attempting to create welcome chat...');
+      await createWelcomeChat(user.uid, userProfile.displayName);
+      Alert.alert(
+        '✅ Success!',
+        'Welcome chat created! Check Firestore Console.',
+        [{ text: 'OK' }]
+      );
+      console.log('✅ Welcome chat created successfully');
+    } catch (error: any) {
+      Alert.alert(
+        '❌ Failed to Create Chat',
+        `Error: ${error.message}\n\nCheck console for details.`,
+        [{ text: 'OK' }]
+      );
+      console.error('❌ Welcome chat creation failed:', error);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -32,6 +83,22 @@ export default function ChatsScreen() {
         
         <Text style={styles.label}>User ID:</Text>
         <Text style={styles.value}>{user?.uid}</Text>
+      </View>
+      
+      <View style={styles.buttonContainer}>
+        <Button 
+          title="🗄️ Test Database" 
+          onPress={handleTestDatabase} 
+          color="#007AFF" 
+        />
+      </View>
+      
+      <View style={styles.buttonContainer}>
+        <Button 
+          title="💬 Create Welcome Chat" 
+          onPress={handleCreateWelcomeChat} 
+          color="#34C759" 
+        />
       </View>
       
       <Button title="Log Out" onPress={logOut} color="#FF3B30" />
@@ -81,6 +148,9 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 8,
     fontFamily: 'monospace',
+  },
+  buttonContainer: {
+    marginBottom: 16,
   },
 });
 
