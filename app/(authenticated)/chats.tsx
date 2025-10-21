@@ -46,7 +46,7 @@ export default function ChatsScreen() {
     const unsubscribe = onUserChatsSnapshot(user.uid, async (updatedChats) => {
       setChats(updatedChats);
       setLoading(false);
-      setRefreshing(false);
+      // Note: setRefreshing(false) is now handled by handleRefresh for manual refreshes
 
       // Fetch participant info for all chats
       const allParticipantIds = new Set<string>();
@@ -78,10 +78,49 @@ export default function ChatsScreen() {
     };
   }, [user]);
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
+    if (refreshing) return; // Prevent multiple simultaneous refreshes
+
     setRefreshing(true);
-    // The onSnapshot listener will automatically refresh
-    // We just need to show the refreshing indicator
+
+    try {
+      if (user) {
+        console.log('🔄 Pull-to-refresh triggered for user:', user.uid);
+
+        // Force refresh of participant data (usernames, display names, etc.)
+        if (chats.length > 0) {
+          const allParticipantIds = new Set<string>();
+          chats.forEach(chat => {
+            chat.participantIds.forEach(id => {
+              if (id !== user.uid) { // Don't fetch current user
+                allParticipantIds.add(id);
+              }
+            });
+          });
+
+          if (allParticipantIds.size > 0) {
+            console.log(`🔄 Refreshing ${allParticipantIds.size} participant profiles`);
+            const participants = await getUsersByIds(Array.from(allParticipantIds));
+            const participantsMap: Record<string, User> = {};
+            participants.forEach(participant => {
+              participantsMap[participant.id] = participant;
+            });
+            setChatParticipants(participantsMap);
+            console.log('✅ Participant profiles refreshed');
+          }
+        }
+
+        // Show refresh indicator for at least 1 second for good UX
+        setTimeout(() => {
+          setRefreshing(false);
+        }, 1000);
+      } else {
+        setRefreshing(false);
+      }
+    } catch (error) {
+      console.error('Error during pull-to-refresh:', error);
+      setRefreshing(false);
+    }
   };
 
   const getChatDisplayInfo = (chat: Chat) => {
@@ -191,11 +230,14 @@ export default function ChatsScreen() {
 
       {/* Chat List */}
       <FlatList
+        style={{flex: 1, minHeight: '100%'}}
         data={chats}
         renderItem={renderChatItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={chats.length === 0 ? styles.emptyContainer : undefined}
         ListEmptyComponent={renderEmptyState}
+        bounces={true}
+        showsVerticalScrollIndicator={true}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

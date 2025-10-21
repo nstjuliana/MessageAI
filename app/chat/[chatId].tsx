@@ -6,16 +6,16 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    FlatList,
-    KeyboardAvoidingView,
-    Platform,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -204,8 +204,9 @@ export default function ChatScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={-30}
+      enabled
     >
       {/* Header */}
       <View style={styles.header}>
@@ -219,14 +220,17 @@ export default function ChatScreen() {
         <View style={styles.placeholder} />
       </View>
 
-      {/* Message List */}
-      <FlatList
+      {/* Message List Container - Takes full available space */}
+      <View style={styles.messageListContainer}>
+        <FlatList
         ref={flatListRef}
         data={messages}
         renderItem={renderMessage}
         keyExtractor={(item) => item.id}
-        inverted // This makes the list scroll from bottom to top (chat UI pattern)
-        contentContainerStyle={messages.length === 0 ? styles.emptyContainer : styles.messageList}
+        contentContainerStyle={[
+          messages.length === 0 ? styles.emptyContainer : styles.messageList,
+          { minHeight: '100%' } // Ensure minimum height for scrolling
+        ]}
         ListEmptyComponent={renderEmptyState}
         refreshControl={
           <RefreshControl
@@ -235,15 +239,19 @@ export default function ChatScreen() {
             tintColor="#007AFF"
           />
         }
+        // Enable proper scrolling
+        showsVerticalScrollIndicator={true}
+        bounces={true}
+        // Auto-scroll to bottom when new messages arrive (normal order)
         onContentSizeChange={() => {
-          // Auto-scroll to bottom when new message arrives
-          if (messages.length > 0) {
-            flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+          if (messages.length > 0 && flatListRef.current) {
+            flatListRef.current.scrollToEnd({ animated: true });
           }
         }}
-      />
+        />
+      </View>
 
-      {/* Message Input */}
+      {/* Message Input - Positioned at bottom */}
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
@@ -320,6 +328,9 @@ const styles = StyleSheet.create({
   messageList: {
     paddingHorizontal: 16,
     paddingVertical: 12,
+  },
+  messageListContainer: {
+    flex: 1, // Take up all available space between header and input
   },
   emptyContainer: {
     flex: 1,
@@ -420,7 +431,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 50, // Extra bottom padding for better spacing
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#E0E0E0',

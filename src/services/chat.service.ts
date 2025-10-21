@@ -418,7 +418,7 @@ export function onChatMessagesSnapshot(
 ): Unsubscribe {
   try {
     const messagesRef = collection(db, CHATS_COLLECTION, chatId, MESSAGES_COLLECTION);
-    const messagesQuery = query(messagesRef, orderBy('createdAt', 'desc'));
+    const messagesQuery = query(messagesRef, orderBy('createdAt', 'asc'));
 
     const unsubscribe = onSnapshot(
       messagesQuery,

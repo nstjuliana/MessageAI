@@ -1,16 +1,16 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -159,6 +159,23 @@ export default function LoginScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.buttonText}>Log In</Text>
+            )}
+          </Pressable>
+
+          {/* TEST USER LOGIN BUTTON REMOVE BEFORE PRODUCTION */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.button,
+              loading && styles.buttonDisabled,
+              pressed && !loading && styles.buttonPressed,
+            ]}
+            onPress={() => void signIn('test@test.com', 'test123').then(() => router.replace('/(authenticated)/chats'))}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Test User Login</Text>
             )}
           </Pressable>
 
