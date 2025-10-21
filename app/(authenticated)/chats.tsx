@@ -6,9 +6,11 @@
 import { Button, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { useUser } from '@/contexts/UserContext';
 
 export default function ChatsScreen() {
-  const { user, userProfile, logOut } = useAuth();
+  const { user, logOut } = useAuth();
+  const { userProfile } = useUser();
 
   return (
     <View style={styles.container}>

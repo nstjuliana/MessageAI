@@ -283,7 +283,8 @@ app/
 ```
 src/
 ├── contexts/
-│   └── AuthContext.tsx            # Authentication state management
+│   ├── AuthContext.tsx            # Authentication state (Firebase Auth only)
+│   └── UserContext.tsx            # User profile state (Firestore data)
 └── hooks/
     ├── use-color-scheme.ts        # Theme hook
     └── use-theme-color.ts         # Color management
@@ -295,6 +296,11 @@ src/
 - Cross-cutting concerns
 - Custom hooks for reusable logic
 - App lifecycle management
+
+**Context Separation:**
+- `AuthContext` → Firebase Authentication only (signUp, signIn, logOut, user state)
+- `UserContext` → Firestore user profile (displayName, bio, presence, profile updates)
+- Clean separation of concerns following Single Responsibility Principle
 
 ### 3. Service Layer (`src/services/`)
 ```
@@ -337,6 +343,210 @@ src/config/
 - Environment variable management
 - Service initialization
 - Configuration constants
+
+---
+
+## Context Architecture
+
+### Separation of Concerns
+
+The application uses a **dual-context architecture** that cleanly separates authentication concerns from user profile management:
+
+```
+App Root
+  ↓
+AuthProvider (Authentication Layer)
+  ├─ Manages Firebase Auth state
+  ├─ Handles signUp, signIn, logOut
+  ├─ Provides: user, loading, auth functions
+  ↓
+UserProvider (Profile Data Layer)
+  ├─ Manages Firestore user profile
+  ├─ Handles profile updates, presence
+  ├─ Provides: userProfile, profileLoading, profile functions
+  ↓
+Application Components
+  ├─ Use useAuth() for authentication
+  └─ Use useUser() for profile data
+```
+
+### AuthContext - Authentication Only
+
+**Purpose:** Manage Firebase Authentication state exclusively
+
+**Provides:**
+```typescript
+{
+  user: FirebaseUser | null;        // Firebase Auth user
+  loading: boolean;                   // Auth initialization loading
+  signUp: (email, password) => Promise<FirebaseUser>;
+  signIn: (email, password) => Promise<FirebaseUser>;
+  logOut: () => Promise<void>;
+}
+```
+
+**Responsibilities:**
+- ✅ Firebase Auth state management
+- ✅ Sign up / sign in / log out operations
+- ✅ Auth state persistence
+- ✅ Redirect logic on logout
+- ❌ Does NOT handle user profile data
+- ❌ Does NOT interact with Firestore
+
+**Usage:**
+```typescript
+function LoginScreen() {
+  const { signIn, loading } = useAuth();
+  // Handle authentication only
+}
+```
+
+### UserContext - Profile Data Only
+
+**Purpose:** Manage Firestore user profile data exclusively
+
+**Provides:**
+```typescript
+{
+  userProfile: User | null;           // Firestore user document
+  profileLoading: boolean;             // Profile fetch loading
+  updateProfile: (updates) => Promise<void>;
+  setPresence: (presence) => Promise<void>;
+  refreshProfile: () => Promise<void>;
+}
+```
+
+**Responsibilities:**
+- ✅ Firestore user profile state
+- ✅ Real-time profile updates (via listener)
+- ✅ Profile CRUD operations
+- ✅ Presence management
+- ❌ Does NOT handle authentication
+- ❌ Does NOT manage Firebase Auth user
+
+**Usage:**
+```typescript
+function ProfileScreen() {
+  const { userProfile, updateProfile } = useUser();
+  // Handle profile data only
+}
+```
+
+**Usage with Both:**
+```typescript
+function ChatScreen() {
+  const { user, logOut } = useAuth();        // Auth operations
+  const { userProfile } = useUser();         // Profile data
+  
+  return (
+    <View>
+      <Text>Welcome, {userProfile?.displayName}!</Text>
+      <Button onPress={logOut}>Log Out</Button>
+    </View>
+  );
+}
+```
+
+### Benefits of Separation
+
+#### 1. Single Responsibility Principle
+- Each context has ONE clear purpose
+- Easier to understand and maintain
+- Changes to auth don't affect profile logic
+
+#### 2. Better Testability
+- Test authentication independently
+- Test profile management independently
+- Clearer test organization
+
+#### 3. Reduced Coupling
+- Components can use just what they need
+- Login screen only needs `useAuth()`
+- Profile screen only needs `useUser()`
+
+#### 4. Cleaner Code
+```typescript
+// BEFORE (Coupled):
+const { user, userProfile, signIn, updateProfile } = useAuth();
+// Everything mixed together!
+
+// AFTER (Separated):
+const { user, signIn } = useAuth();              // Auth only
+const { userProfile, updateProfile } = useUser(); // Profile only
+// Clear separation!
+```
+
+#### 5. Easier to Extend
+- Add features to auth without touching profile
+- Add profile features without touching auth
+- Can add more contexts (settings, notifications) easily
+
+### Provider Nesting Order
+
+**Critical:** UserProvider MUST be inside AuthProvider:
+
+```typescript
+// ✅ CORRECT
+<AuthProvider>
+  <UserProvider>
+    <App />
+  </UserProvider>
+</AuthProvider>
+
+// ❌ WRONG - UserContext needs auth state!
+<UserProvider>
+  <AuthProvider>
+    <App />
+  </AuthProvider>
+</UserProvider>
+```
+
+**Why:** UserContext needs to know when user is authenticated to load their profile.
+
+### Loading States
+
+Both contexts have independent loading states:
+
+```typescript
+const { user, loading } = useAuth();                    // Auth loading
+const { userProfile, profileLoading } = useUser();      // Profile loading
+
+// Typical loading sequence:
+// 1. loading=true, profileLoading=false     → Checking auth
+// 2. loading=false, profileLoading=true     → Auth done, loading profile
+// 3. loading=false, profileLoading=false    → Fully loaded
+```
+
+**Handle both:**
+```typescript
+if (loading) return <AuthLoadingScreen />;
+if (!user) return <LoginScreen />;
+if (profileLoading) return <ProfileLoadingScreen />;
+return <MainApp />;
+```
+
+### Real-Time Synchronization
+
+**UserContext** automatically subscribes to profile updates:
+
+```typescript
+// In UserContext:
+useEffect(() => {
+  if (!user) return;
+  
+  // Real-time listener
+  const unsubscribe = onUserSnapshot(user.uid, (profile) => {
+    setUserProfile(profile);
+  });
+  
+  return unsubscribe; // Cleanup on logout
+}, [user]);
+```
+
+**Benefits:**
+- Profile changes appear instantly everywhere
+- Single Firestore listener (cost-efficient)
+- All components stay in sync automatically
 
 ---
 
@@ -710,4 +920,10 @@ jest.mock('@/config/firebase');
 - 2025-10-21: Initial architecture document created
 - 2025-10-21: Added User Service implementation details
 - 2025-10-21: Added Key Features section with full API reference
+- 2025-10-21: **ARCHITECTURE REFACTOR** - Separated AuthContext and UserContext
+  - Created UserContext for Firestore profile management
+  - AuthContext now handles ONLY Firebase Authentication
+  - Implemented clean separation of concerns
+  - Added comprehensive Context Architecture section
+  - Updated all components to use dual-context pattern
 
