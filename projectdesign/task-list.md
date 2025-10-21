@@ -69,12 +69,12 @@
 39. [x] Update user's `lastSeen` timestamp on app activity
 
 ### SQLite Local Database
-40. [ ] Create `src/database/schema.ts` with SQLite table definitions
-41. [ ] Create `src/database/database.ts` with SQLite initialization
-42. [ ] Implement `messages` table with offline queue fields
-43. [ ] Implement `chats` table for chat list cache
-44. [ ] Implement `chat_participants` table for participant cache
-45. [ ] Create database migration system for schema updates
+40. [x] Create `src/database/schema.ts` with SQLite table definitions
+41. [x] Create `src/database/database.ts` with SQLite initialization
+42. [x] Implement `messages` table with offline queue fields
+43. [x] Implement `chats` table for chat list cache
+44. [x] Implement `chat_participants` table for participant cache
+45. [x] Create database migration system for schema updates
 46. [ ] Test database operations (insert, query, update, delete)
 
 ### Deployment Checkpoint #1
