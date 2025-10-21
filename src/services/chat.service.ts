@@ -73,6 +73,7 @@ export async function createChat(chatData: CreateChatData): Promise<Chat> {
       type: chatData.type,
       participantIds: chatData.participantIds,
       adminIds: chatData.adminIds || [],
+      lastMessageAt: serverTimestamp(), // Set initial timestamp so chat appears in list
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
@@ -93,6 +94,7 @@ export async function createChat(chatData: CreateChatData): Promise<Chat> {
       adminIds: chatData.adminIds || [],
       groupName: chatData.groupName,
       groupAvatarUrl: chatData.groupAvatarUrl,
+      lastMessageAt: now, // Include in return value
       createdAt: now,
       updatedAt: now,
     };
