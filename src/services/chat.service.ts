@@ -370,3 +370,113 @@ export async function findOrCreateDMChat(
   }
 }
 
+/**
+ * Get a chat by ID
+ * @param chatId - Chat ID
+ * @returns Chat object or null if not found
+ */
+export async function getChatById(chatId: string): Promise<Chat | null> {
+  try {
+    const chatRef = doc(db, CHATS_COLLECTION, chatId);
+    const chatSnap = await getDoc(chatRef);
+
+    if (!chatSnap.exists()) {
+      return null;
+    }
+
+    const data = chatSnap.data();
+    return {
+      id: chatSnap.id,
+      type: data.type,
+      participantIds: data.participantIds || [],
+      adminIds: data.adminIds || [],
+      groupName: data.groupName,
+      groupAvatarUrl: data.groupAvatarUrl,
+      lastMessageId: data.lastMessageId,
+      lastMessageText: data.lastMessageText,
+      lastMessageAt: data.lastMessageAt?.toMillis?.() || data.lastMessageAt || 0,
+      createdAt: data.createdAt?.toMillis?.() || data.createdAt || 0,
+      updatedAt: data.updatedAt?.toMillis?.() || data.updatedAt || 0,
+    };
+  } catch (error) {
+    console.error('❌ Error fetching chat:', error);
+    throw error;
+  }
+}
+
+/**
+ * Listen to messages in a chat in real-time
+ * @param chatId - Chat ID
+ * @param callback - Function called with messages array when updated
+ * @returns Unsubscribe function
+ */
+export function onChatMessagesSnapshot(
+  chatId: string,
+  callback: (messages: Message[]) => void
+): Unsubscribe {
+  try {
+    const messagesRef = collection(db, CHATS_COLLECTION, chatId, MESSAGES_COLLECTION);
+    const messagesQuery = query(messagesRef, orderBy('createdAt', 'desc'));
+
+    const unsubscribe = onSnapshot(
+      messagesQuery,
+      (snapshot) => {
+        const messages: Message[] = snapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            chatId,
+            senderId: data.senderId,
+            text: data.text || '',
+            mediaUrl: data.mediaUrl,
+            mediaMime: data.mediaMime,
+            replyToId: data.replyToId,
+            status: data.status || 'sent',
+            edited: data.edited || false,
+            editedAt: data.editedAt?.toMillis?.() || data.editedAt,
+            createdAt: data.createdAt?.toMillis?.() || data.createdAt || Date.now(),
+          };
+        });
+        console.log(`📱 Received ${messages.length} messages for chat ${chatId}`);
+        callback(messages);
+      },
+      (error) => {
+        console.error('❌ Error listening to messages:', error);
+        callback([]);
+      }
+    );
+
+    return unsubscribe;
+  } catch (error) {
+    console.error('❌ Error setting up messages listener:', error);
+    return () => {};
+  }
+}
+
+/**
+ * Send a message to a chat
+ * @param chatId - Chat ID
+ * @param senderId - Sender user ID
+ * @param text - Message text
+ * @returns Created message
+ */
+export async function sendMessage(
+  chatId: string,
+  senderId: string,
+  text: string
+): Promise<Message> {
+  try {
+    const messageData: CreateMessageData = {
+      chatId,
+      senderId,
+      text,
+    };
+
+    const message = await createMessage(messageData);
+    return message;
+  } catch (error) {
+    console.error('❌ Error sending message:', error);
+    throw error;
+  }
+}
+

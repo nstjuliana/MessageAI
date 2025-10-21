@@ -105,13 +105,13 @@
 63. [x] Handle duplicate chat prevention (don't create multiple DMs with same user)
 
 ### Chat Conversation Screen
-64. [ ] Build Chat screen UI (`app/chat/[chatId].tsx`)
-65. [ ] Create message bubble component (sent vs received styling)
-66. [ ] Implement message list with FlatList (inverted for chat UI)
-67. [ ] Create message input component (TextInput + Send button)
-68. [ ] Display message timestamps
-69. [ ] Show sender name/avatar for received messages
-70. [ ] Add pull-to-refresh for loading older messages
+64. [x] Build Chat screen UI (`app/chat/[chatId].tsx`)
+65. [x] Create message bubble component (sent vs received styling)
+66. [x] Implement message list with FlatList (inverted for chat UI)
+67. [x] Create message input component (TextInput + Send button)
+68. [x] Display message timestamps
+69. [x] Show sender name/avatar for received messages
+70. [x] Add pull-to-refresh for loading older messages
 
 ### Send Message (Optimistic UI)
 71. [ ] Create `src/services/message.service.ts`

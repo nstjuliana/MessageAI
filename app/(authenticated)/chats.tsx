@@ -131,8 +131,7 @@ export default function ChatsScreen() {
         style={styles.chatItem}
         onPress={() => {
           resetActivityTimer();
-          // TODO: Navigate to chat screen
-          console.log('Open chat:', item.id);
+          router.push(`/chat/${item.id}` as any);
         }}
       >
         {/* Avatar placeholder */}
