@@ -28,11 +28,12 @@ import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 import { getChatById, onChatMessagesSnapshot } from '@/services/chat.service';
 import {
   getMessagesFromSQLite,
+  markMessageAsDelivered,
   sendMessageOptimistic,
   syncMessageToSQLite,
 } from '@/services/message.service';
-import { getUsersByIds } from '@/services/user.service';
 import { onTypingStatusChange } from '@/services/typing.service';
+import { getUsersByIds } from '@/services/user.service';
 import type { Chat, Message, MessageStatus } from '@/types/chat.types';
 import type { PublicUserProfile } from '@/types/user.types';
 
@@ -55,6 +56,9 @@ export default function ChatScreen() {
   
   // Track message statuses for optimistic UI
   const [messageStatuses, setMessageStatuses] = useState<Record<string, MessageStatus>>({});
+  
+  // Track which messages we've already processed to avoid re-syncing
+  const processedMessagesRef = useRef<Map<string, string>>(new Map()); // messageId -> status hash
 
   // Load chat data and messages (SQLite + Firestore)
   useEffect(() => {
@@ -111,9 +115,40 @@ export default function ChatScreen() {
         unsubscribeMessages = onChatMessagesSnapshot(chatId, async (firestoreMessages) => {
           messagesFromFirestore = firestoreMessages;
           
-          // Sync Firestore messages to SQLite
+          // Track how many messages are actually new or updated
+          let newOrUpdatedCount = 0;
+          
+          // Sync Firestore messages to SQLite and mark as delivered
+          // Only process messages that are new or have changed status
           for (const message of firestoreMessages) {
-            await syncMessageToSQLite(message);
+            const messageHash = `${message.id}-${message.status}`;
+            const previousHash = processedMessagesRef.current.get(message.id);
+            
+            // Only sync if message is new or status has changed
+            if (previousHash !== messageHash) {
+              newOrUpdatedCount++;
+              await syncMessageToSQLite(message);
+              processedMessagesRef.current.set(message.id, messageHash);
+              
+              // Update messageStatuses for UI updates (fixes real-time status display)
+              setMessageStatuses(prev => ({
+                ...prev,
+                [message.id]: message.status
+              }));
+              
+              // Mark messages as delivered if:
+              // - Message status is 'sent' (not already delivered)
+              // - Current user is NOT the sender (recipient receiving the message)
+              // - We haven't already marked it (check previous status)
+              if (message.status === 'sent' && message.senderId !== user.uid && !previousHash?.includes('-delivered')) {
+                await markMessageAsDelivered(chatId, message.id, user.uid, message.senderId);
+              }
+            }
+          }
+          
+          // Only log if there were actual changes
+          if (newOrUpdatedCount > 0) {
+            console.log(`📱 Synced ${newOrUpdatedCount} new/updated messages (${firestoreMessages.length} total)`);
           }
           
           // Merge messages: Use Map to deduplicate by ID

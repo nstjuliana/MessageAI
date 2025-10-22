@@ -54,8 +54,18 @@ service cloud.firestore {
                          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
         
         // Message sender can update/delete their own messages
-        allow update, delete: if isAuthenticated() && 
-                                 request.auth.uid == resource.data.senderId;
+        allow delete: if isAuthenticated() && 
+                         request.auth.uid == resource.data.senderId;
+        
+        // Sender can update their own messages
+        // OR participants can update status field only (for delivery/read receipts)
+        allow update: if isAuthenticated() && (
+          // Sender can update anything
+          request.auth.uid == resource.data.senderId ||
+          // Participants can only update the status and updatedAt fields
+          (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds &&
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']))
+        );
       }
       
       // Read receipts subcollection

@@ -162,10 +162,10 @@
 104. [x] Handle multiple users typing in groups
 
 ### Message Delivery Status (DM)
-105. [ ] Update message status to "delivered" when recipient receives
-106. [ ] Display checkmark indicators (single ✓ = sent, double ✓✓ = delivered)
-107. [ ] Listen for message status updates in real-time
-108. [ ] Update SQLite when status changes
+105. [x] Update message status to "delivered" when recipient receives
+106. [x] Display checkmark indicators (single ✓ = sent, double ✓✓ = delivered)
+107. [x] Listen for message status updates in real-time
+108. [x] Update SQLite when status changes
 
 ### Read Receipts (DM)
 109. [ ] Track last read message ID per user

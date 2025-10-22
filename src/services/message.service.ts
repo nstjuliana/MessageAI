@@ -200,6 +200,64 @@ async function updateChatLastMessage(
 }
 
 /**
+ * Update message status in Firestore
+ * Used for delivery and read receipts
+ */
+export async function updateMessageStatusInFirestore(
+  chatId: string,
+  messageId: string,
+  status: MessageStatus
+): Promise<void> {
+  try {
+    const messageRef = doc(
+      db,
+      CHATS_COLLECTION,
+      chatId,
+      MESSAGES_COLLECTION,
+      messageId
+    );
+    
+    await updateDoc(messageRef, {
+      status,
+      updatedAt: serverTimestamp(),
+    });
+    
+    // Only log errors, not successful status updates (too verbose)
+  } catch (error) {
+    console.error(`❌ Failed to update message status in Firestore:`, error);
+    // Don't throw - delivery status is not critical for app functionality
+  }
+}
+
+/**
+ * Mark a message as delivered
+ * Called when the recipient receives the message
+ */
+export async function markMessageAsDelivered(
+  chatId: string,
+  messageId: string,
+  currentUserId: string,
+  senderId: string
+): Promise<void> {
+  // Only mark as delivered if the current user is NOT the sender
+  if (currentUserId === senderId) {
+    return;
+  }
+  
+  try {
+    // Update in Firestore
+    await updateMessageStatusInFirestore(chatId, messageId, 'delivered');
+    
+    // Update in SQLite
+    await updateMessageStatusInSQLite(messageId, 'delivered', true);
+    
+    // Silent success - delivery status updates are frequent and not critical to log
+  } catch (error) {
+    console.error(`❌ Failed to mark message as delivered:`, error);
+  }
+}
+
+/**
  * Send a message with optimistic UI
  * 
  * Flow:
@@ -362,14 +420,14 @@ export async function syncMessageToSQLite(message: Message): Promise<void> {
     const sqlite = getDatabase();
     
     // Check if message already exists
-    const existingSql = 'SELECT id FROM messages WHERE id = ?';
-    const existing = await sqlite.getFirstAsync<{ id: string }>(
+    const existingSql = 'SELECT id, status FROM messages WHERE id = ?';
+    const existing = await sqlite.getFirstAsync<{ id: string; status: string }>(
       existingSql,
       [message.id]
     );
     
     if (existing) {
-      // Update existing message
+      // Update existing message (only if status changed or other fields differ)
       const updateSql = `
         UPDATE messages 
         SET text = ?, mediaUrl = ?, mediaMime = ?, status = ?,
@@ -386,6 +444,11 @@ export async function syncMessageToSQLite(message: Message): Promise<void> {
         message.editedAt || null,
         message.id,
       ]);
+      
+      // Only log if status changed (meaningful update)
+      if (existing.status !== message.status) {
+        console.log(`📝 Message ${message.id} status: ${existing.status} → ${message.status}`);
+      }
     } else {
       // Insert new message
       const insertSql = `
@@ -408,11 +471,40 @@ export async function syncMessageToSQLite(message: Message): Promise<void> {
         message.edited ? 1 : 0,
         message.editedAt || null,
       ]);
+      
+      // Only log new message inserts, not updates
+      console.log('✅ New message synced to SQLite:', message.id);
     }
-    
-    console.log('✅ Message synced to SQLite:', message.id);
   } catch (error) {
-    console.error('❌ Failed to sync message to SQLite:', error);
+    // If we get a UNIQUE constraint error, it means a race condition occurred
+    // Try to update the existing message instead
+    if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
+      try {
+        const sqlite = getDatabase();
+        const updateSql = `
+          UPDATE messages 
+          SET text = ?, mediaUrl = ?, mediaMime = ?, status = ?,
+              edited = ?, editedAt = ?, syncedToFirestore = 1
+          WHERE id = ?
+        `;
+        
+        await executeStatement(updateSql, [
+          message.text || null,
+          message.mediaUrl || null,
+          message.mediaMime || null,
+          message.status,
+          message.edited ? 1 : 0,
+          message.editedAt || null,
+          message.id,
+        ]);
+        
+        console.log(`🔄 Recovered from race condition - updated message ${message.id}`);
+      } catch (updateError) {
+        console.error('❌ Failed to recover from UNIQUE constraint error:', updateError);
+      }
+    } else {
+      console.error('❌ Failed to sync message to SQLite:', error);
+    }
   }
 }
 
