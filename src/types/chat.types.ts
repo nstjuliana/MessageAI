@@ -18,6 +18,7 @@ export interface Chat {
   groupAvatarUrl?: string; // For group chats
   lastMessageId?: string;
   lastMessageText?: string;
+  lastMessageSenderId?: string; // User ID of who sent the last message
   lastMessageAt?: number; // Unix timestamp
   createdAt: number; // Unix timestamp
   updatedAt: number; // Unix timestamp

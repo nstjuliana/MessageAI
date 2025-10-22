@@ -2,6 +2,7 @@
  * Protected Routes Layout
  * This layout ensures users are authenticated before accessing these screens
  * Also handles presence tracking (online/offline/away status)
+ * and in-app notifications for new messages
  */
 
 import { Redirect, Stack, usePathname } from 'expo-router';
@@ -10,41 +11,32 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { ActivityProvider } from '@/contexts/ActivityContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { NotificationProvider, useNotifications } from '@/contexts/NotificationContext';
+import { useInAppNotifications } from '@/hooks/useInAppNotifications';
 import { useNetworkRetry } from '@/hooks/useNetworkRetry';
 import { usePresenceTrackingRTDB } from '@/hooks/usePresenceTrackingRTDB';
+import InAppNotification from '../../components/InAppNotification';
 
-export default function AuthenticatedLayout() {
-  const { user, loading } = useAuth();
+/**
+ * Inner layout component that uses notification context
+ * Separated to allow NotificationProvider to wrap it
+ */
+function AuthenticatedContent() {
   const pathname = usePathname();
-  
-  // Track user presence (online/offline/away) using RTDB
   const { resetActivityTimer } = usePresenceTrackingRTDB();
+  const { currentNotification, dismissNotification } = useNotifications();
+  
+  // Set up global in-app notification listener
+  useInAppNotifications();
   
   // Enable automatic message retry when network reconnects (app-wide)
   useNetworkRetry();
 
   // Reset activity timer whenever user navigates to a new screen
   useEffect(() => {
-    if (user) {
-      resetActivityTimer();
-    }
-  }, [pathname, user]);
+    resetActivityTimer();
+  }, [pathname]);
 
-  // Show loading spinner while checking authentication
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#007AFF" />
-      </View>
-    );
-  }
-
-  // Redirect to login if not authenticated
-  if (!user) {
-    return <Redirect href="/auth/login" />;
-  }
-
-  // User is authenticated, render the protected screens
   // Handle all touches to reset activity timer (for presence tracking)
   const handleTouchActivity = () => {
     resetActivityTimer();
@@ -96,8 +88,39 @@ export default function AuthenticatedLayout() {
             }} 
           />
         </Stack>
+        
+        {/* In-App Notification Banner */}
+        <InAppNotification
+          notification={currentNotification}
+          onDismiss={dismissNotification}
+        />
       </View>
     </ActivityProvider>
+  );
+}
+
+export default function AuthenticatedLayout() {
+  const { user, loading } = useAuth();
+
+  // Show loading spinner while checking authentication
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
+
+  // Redirect to login if not authenticated
+  if (!user) {
+    return <Redirect href="/auth/login" />;
+  }
+
+  // User is authenticated, render the protected screens with notification support
+  return (
+    <NotificationProvider>
+      <AuthenticatedContent />
+    </NotificationProvider>
   );
 }
 
