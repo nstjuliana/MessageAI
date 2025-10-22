@@ -15,9 +15,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 
+import { doc, onSnapshot } from 'firebase/firestore';
+
+import { db } from '@/config/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePresenceTracking } from '@/hooks/usePresenceTracking';
 import { getChatById, onChatMessagesSnapshot } from '@/services/chat.service';
@@ -140,6 +143,42 @@ export default function ChatScreen() {
     };
   }, [chatId, user]);
 
+  // Listen for real-time presence updates for DM participant
+  useEffect(() => {
+    if (!chat || chat.type === 'group' || !user) return;
+
+    const otherParticipantId = chat.participantIds.find(id => id !== user.uid);
+    if (!otherParticipantId) return;
+
+    console.log(`👁️ Setting up presence listener for user: ${otherParticipantId}`);
+
+    // Listen to the other user's document for presence changes
+    const userRef = doc(db, 'users', otherParticipantId);
+    const unsubscribe = onSnapshot(userRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const userData = snapshot.data();
+        console.log(`🔄 Presence updated for ${otherParticipantId}:`, userData.presence);
+        
+        // Update the participant's presence in state
+        setParticipants(prev => ({
+          ...prev,
+          [otherParticipantId]: {
+            ...prev[otherParticipantId],
+            presence: userData.presence || 'offline',
+            lastSeen: userData.lastSeen,
+          },
+        }));
+      }
+    }, (error) => {
+      console.error('Error listening to presence:', error);
+    });
+
+    return () => {
+      console.log(`👋 Cleaning up presence listener for user: ${otherParticipantId}`);
+      unsubscribe();
+    };
+  }, [chat, user]);
+
   const handleSend = async () => {
     if (!messageText.trim() || !user || !chatId || sending) return;
 
@@ -182,6 +221,7 @@ export default function ChatScreen() {
   };
 
   const handleRefresh = async () => {
+    resetActivityTimer();
     setRefreshing(true);
     // TODO: Load older messages
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -198,6 +238,24 @@ export default function ChatScreen() {
       const otherParticipantId = chat.participantIds.find(id => id !== user?.uid);
       const otherParticipant = otherParticipantId ? participants[otherParticipantId] : null;
       return otherParticipant?.displayName || 'Chat';
+    }
+  };
+
+  const getOtherParticipant = () => {
+    if (!chat || chat.type === 'group') return null;
+    const otherParticipantId = chat.participantIds.find(id => id !== user?.uid);
+    return otherParticipantId ? participants[otherParticipantId] : null;
+  };
+
+  const getPresenceColor = (presence?: 'online' | 'away' | 'offline'): string => {
+    switch (presence) {
+      case 'online':
+        return '#34C759'; // Green
+      case 'away':
+        return '#FF9500'; // Orange
+      case 'offline':
+      default:
+        return '#8E8E93'; // Gray
     }
   };
 
@@ -298,6 +356,10 @@ export default function ChatScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={-30}
       enabled
+      onStartShouldSetResponder={() => {
+        resetActivityTimer();
+        return false; // Don't capture the event, just track it
+      }}
     >
       {/* Header */}
       <View style={styles.header}>
@@ -305,8 +367,31 @@ export default function ChatScreen() {
           <Text style={styles.backText}>‹ Back</Text>
         </TouchableOpacity>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle}>{getChatTitle()}</Text>
-          {/* TODO: Show online status or participant count */}
+          {chat?.type === 'dm' ? (
+            // DM: Show profile picture with status indicator
+            <View style={styles.headerAvatarContainer}>
+              <View style={styles.headerAvatar}>
+                <Text style={styles.headerAvatarText}>
+                  {getOtherParticipant()?.displayName?.charAt(0).toUpperCase() || '?'}
+                </Text>
+                {/* Status indicator */}
+                <View style={[
+                  styles.statusDot,
+                  { backgroundColor: getPresenceColor(getOtherParticipant()?.presence) }
+                ]} />
+              </View>
+              {/* Name below avatar */}
+              <Text style={styles.headerName}>{getChatTitle()}</Text>
+            </View>
+          ) : (
+            // Group: Show group name with participant count
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.headerTitle}>{getChatTitle()}</Text>
+              <Text style={styles.headerSubtitle}>
+                {chat?.participantIds.length || 0} participants
+              </Text>
+            </View>
+          )}
         </View>
         <View style={styles.placeholder} />
       </View>
@@ -333,6 +418,9 @@ export default function ChatScreen() {
         // Enable proper scrolling
         showsVerticalScrollIndicator={true}
         bounces={true}
+        // Reset activity timer on scroll
+        onScroll={resetActivityTimer}
+        scrollEventThrottle={1000}
         // Auto-scroll to bottom when new messages arrive (normal order)
         onContentSizeChange={() => {
           if (messages.length > 0 && flatListRef.current) {
@@ -399,6 +487,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
+    minWidth: 70,
   },
   backText: {
     fontSize: 18,
@@ -407,14 +496,57 @@ const styles = StyleSheet.create({
   headerInfo: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerAvatarContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  headerAvatarText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  statusDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  headerName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000',
+    marginTop: 4,
+  },
+  headerTextContainer: {
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#000',
   },
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginTop: 2,
+  },
   placeholder: {
-    width: 40,
+    minWidth: 70,
   },
   messageList: {
     paddingHorizontal: 16,

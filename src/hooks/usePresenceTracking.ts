@@ -42,6 +42,7 @@ export function usePresenceTracking() {
     // Set away after 5 minutes (300000ms)
     awayTimerRef.current = setTimeout(() => {
       if (user) {
+        console.log('⏰ User inactive for 5 minutes - setting status to away');
         updatePresence(user.uid, 'away').catch((error) => {
           console.error('Failed to set away status:', error);
         });
@@ -148,6 +149,8 @@ export function usePresenceTracking() {
   // Reset away timer on user activity (could be triggered by touch events)
   const resetActivityTimer = () => {
     if (!user) return;
+    
+    console.log('👆 User activity detected - resetting to online');
     
     // Set user back to online if they were away
     updatePresence(user.uid, 'online').catch((error) => {

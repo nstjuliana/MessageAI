@@ -1,7 +1,6 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { initializeApp } from 'firebase/app';
-import { getReactNativePersistence, initializeAuth } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
@@ -24,11 +23,10 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase Auth with React Native persistence
-// This ensures auth state persists between app sessions
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage),
-});
+// Initialize Firebase Auth
+// Note: Firebase JS SDK uses IndexedDB for persistence by default in web
+// For React Native, AsyncStorage persistence is handled by @react-native-async-storage/async-storage
+const auth = getAuth(app);
 
 // Initialize Firestore
 const db = getFirestore(app);

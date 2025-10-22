@@ -125,22 +125,22 @@
 79. [x] Show message status indicator (sending/sent/failed)
 
 ### Receive Messages (Real-time)
-80. [ ] Set up Firestore listener for new messages in chat
-81. [ ] Insert received messages into SQLite
-82. [ ] Update UI when new message arrives
-83. [ ] Auto-scroll to bottom on new message (if already at bottom)
+80. [x] Set up Firestore listener for new messages in chat
+81. [x] Insert received messages into SQLite
+82. [x] Update UI when new message arrives
+83. [x] Auto-scroll to bottom on new message (if already at bottom)
 84. [ ] Play sound/haptic feedback on receive (optional)
 85. [ ] Implement "scroll to bottom" button when scrolled up
 
 ### Message Persistence & Offline Support
-86. [ ] Load last 20 messages from SQLite on chat open
-87. [ ] Sync messages from Firestore on first load
-88. [ ] Implement retry mechanism for failed messages
-89. [ ] Listen to network state changes with NetInfo
-90. [ ] Trigger message retry on reconnection
+86. [x] Load last 20 messages from SQLite on chat open
+87. [x] Sync messages from Firestore on first load
+88. [x] Implement retry mechanism for failed messages
+89. [x] Listen to network state changes with NetInfo
+90. [x] Trigger message retry on reconnection
 91. [ ] Implement exponential backoff for retries
 92. [ ] Display offline indicator when network unavailable
-93. [ ] Queue messages sent while offline
+93. [x] Queue messages sent while offline
 
 ### Deployment Checkpoint #2
 94. [ ] Deploy messaging functionality to Expo Go

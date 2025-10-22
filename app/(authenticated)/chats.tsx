@@ -81,6 +81,7 @@ export default function ChatsScreen() {
   const handleRefresh = async () => {
     if (refreshing) return; // Prevent multiple simultaneous refreshes
 
+    resetActivityTimer();
     setRefreshing(true);
 
     try {
@@ -238,6 +239,8 @@ export default function ChatsScreen() {
         ListEmptyComponent={renderEmptyState}
         bounces={true}
         showsVerticalScrollIndicator={true}
+        onScroll={resetActivityTimer}
+        scrollEventThrottle={1000}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
