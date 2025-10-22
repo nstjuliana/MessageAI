@@ -6,29 +6,30 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useActivity } from '@/contexts/ActivityContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useNotifications } from '@/contexts/NotificationContext';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 import { getChatById, onChatMessagesSnapshot } from '@/services/chat.service';
 import {
-    getMessagesFromSQLite,
-    markMessageAsDelivered,
-    sendMessageOptimistic,
-    syncMessageToSQLite,
+  getMessagesFromSQLite,
+  markMessageAsDelivered,
+  sendMessageOptimistic,
+  syncMessageToSQLite,
 } from '@/services/message.service';
 import { onUsersPresenceChange } from '@/services/presence.service';
 import { onTypingStatusChange } from '@/services/typing-rtdb.service';
@@ -40,6 +41,7 @@ export default function ChatScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
   const { user } = useAuth();
   const { resetActivityTimer } = useActivity();
+  const { setActiveChatId } = useNotifications();
   const { onTypingStart, clearTyping } = useTypingIndicator(chatId || null, user?.uid || null);
   
   const [chat, setChat] = useState<Chat | null>(null);
@@ -59,6 +61,19 @@ export default function ChatScreen() {
   
   // Track which messages we've already processed to avoid re-syncing
   const processedMessagesRef = useRef<Map<string, string>>(new Map()); // messageId -> status hash
+
+  // Register this chat as active (suppress notifications for this chat)
+  useEffect(() => {
+    if (chatId) {
+      console.log('📍 Registering active chat:', chatId);
+      setActiveChatId(chatId);
+      
+      return () => {
+        console.log('📍 Unregistering active chat:', chatId);
+        setActiveChatId(null);
+      };
+    }
+  }, [chatId, setActiveChatId]);
 
   // Load chat data and messages (SQLite + Firestore)
   useEffect(() => {

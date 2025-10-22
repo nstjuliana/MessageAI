@@ -10,41 +10,29 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { ActivityProvider } from '@/contexts/ActivityContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { NotificationProvider, useNotifications } from '@/contexts/NotificationContext';
+import { useInAppNotifications } from '@/hooks/useInAppNotifications';
 import { useNetworkRetry } from '@/hooks/useNetworkRetry';
 import { usePresenceTrackingRTDB } from '@/hooks/usePresenceTrackingRTDB';
+import InAppNotification from '../../components/InAppNotification';
 
-export default function AuthenticatedLayout() {
-  const { user, loading } = useAuth();
+// Component that uses notification context (must be inside provider)
+function AuthenticatedContent() {
   const pathname = usePathname();
-  
-  // Track user presence (online/offline/away) using RTDB
   const { resetActivityTimer } = usePresenceTrackingRTDB();
+  const { currentNotification, dismissNotification } = useNotifications();
   
   // Enable automatic message retry when network reconnects (app-wide)
   useNetworkRetry();
+  
+  // Enable in-app notifications
+  useInAppNotifications();
 
   // Reset activity timer whenever user navigates to a new screen
   useEffect(() => {
-    if (user) {
-      resetActivityTimer();
-    }
-  }, [pathname, user]);
+    resetActivityTimer();
+  }, [pathname]);
 
-  // Show loading spinner while checking authentication
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#007AFF" />
-      </View>
-    );
-  }
-
-  // Redirect to login if not authenticated
-  if (!user) {
-    return <Redirect href="/auth/login" />;
-  }
-
-  // User is authenticated, render the protected screens
   // Handle all touches to reset activity timer (for presence tracking)
   const handleTouchActivity = () => {
     resetActivityTimer();
@@ -96,8 +84,39 @@ export default function AuthenticatedLayout() {
             }} 
           />
         </Stack>
+        
+        {/* In-app notification banner */}
+        <InAppNotification 
+          notification={currentNotification} 
+          onDismiss={dismissNotification} 
+        />
       </View>
     </ActivityProvider>
+  );
+}
+
+export default function AuthenticatedLayout() {
+  const { user, loading } = useAuth();
+
+  // Show loading spinner while checking authentication
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
+
+  // Redirect to login if not authenticated
+  if (!user) {
+    return <Redirect href="/auth/login" />;
+  }
+
+  // User is authenticated, wrap with NotificationProvider
+  return (
+    <NotificationProvider>
+      <AuthenticatedContent />
+    </NotificationProvider>
   );
 }
 

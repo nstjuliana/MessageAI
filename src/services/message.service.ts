@@ -187,13 +187,15 @@ async function sendMessageToFirestore(
 async function updateChatLastMessage(
   chatId: string,
   messageId: string,
-  messageText: string
+  messageText: string,
+  senderId: string
 ): Promise<void> {
   const chatRef = doc(db, CHATS_COLLECTION, chatId);
   
   await updateDoc(chatRef, {
     lastMessageId: messageId,
     lastMessageText: messageText || '[Media]',
+    lastMessageSenderId: senderId,
     lastMessageAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -318,7 +320,7 @@ export async function sendMessageOptimistic(
         // Add timeout to Firestore write (10 seconds)
         const firestoreWritePromise = Promise.all([
           sendMessageToFirestore(message),
-          updateChatLastMessage(message.chatId, message.id, message.text || '')
+          updateChatLastMessage(message.chatId, message.id, message.text || '', message.senderId)
         ]);
         
         const timeoutPromise = new Promise((_, reject) =>
@@ -574,7 +576,8 @@ export async function retryFailedMessage(
       await updateChatLastMessage(
         message.chatId,
         message.id,
-        message.text || ''
+        message.text || '',
+        message.senderId
       );
       
       // Update status to "sent"

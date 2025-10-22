@@ -6,18 +6,18 @@
 import { db } from '@/config/firebase';
 import type { Chat, CreateChatData, CreateMessageData, Message } from '@/types/chat.types';
 import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-  where,
-  type Unsubscribe,
+    collection,
+    doc,
+    getDoc,
+    getDocs,
+    onSnapshot,
+    orderBy,
+    query,
+    serverTimestamp,
+    setDoc,
+    updateDoc,
+    where,
+    type Unsubscribe,
 } from 'firebase/firestore';
 
 const CHATS_COLLECTION = 'chats';
@@ -173,6 +173,7 @@ export async function createMessage(messageData: CreateMessageData): Promise<Mes
     await updateDoc(chatRef, {
       lastMessageId: messageRef.id,
       lastMessageText: messageData.text || '[Media]',
+      lastMessageSenderId: messageData.senderId,
       lastMessageAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -282,6 +283,7 @@ export function onUserChatsSnapshot(
             groupAvatarUrl: data.groupAvatarUrl,
             lastMessageId: data.lastMessageId,
             lastMessageText: data.lastMessageText,
+            lastMessageSenderId: data.lastMessageSenderId,
             lastMessageAt: data.lastMessageAt?.toMillis?.() || data.lastMessageAt || 0,
             createdAt: data.createdAt?.toMillis?.() || data.createdAt || 0,
             updatedAt: data.updatedAt?.toMillis?.() || data.updatedAt || 0,
@@ -350,6 +352,7 @@ export async function findOrCreateDMChat(
           groupAvatarUrl: data.groupAvatarUrl,
           lastMessageId: data.lastMessageId,
           lastMessageText: data.lastMessageText,
+          lastMessageSenderId: data.lastMessageSenderId,
           lastMessageAt: data.lastMessageAt?.toMillis?.() || data.lastMessageAt || 0,
           createdAt: data.createdAt?.toMillis?.() || data.createdAt || 0,
           updatedAt: data.updatedAt?.toMillis?.() || data.updatedAt || 0,
@@ -396,6 +399,7 @@ export async function getChatById(chatId: string): Promise<Chat | null> {
       groupAvatarUrl: data.groupAvatarUrl,
       lastMessageId: data.lastMessageId,
       lastMessageText: data.lastMessageText,
+      lastMessageSenderId: data.lastMessageSenderId,
       lastMessageAt: data.lastMessageAt?.toMillis?.() || data.lastMessageAt || 0,
       createdAt: data.createdAt?.toMillis?.() || data.createdAt || 0,
       updatedAt: data.updatedAt?.toMillis?.() || data.updatedAt || 0,
