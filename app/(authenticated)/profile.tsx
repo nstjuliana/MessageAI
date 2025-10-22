@@ -3,23 +3,26 @@
  * User profile view and editing
  */
 
+import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useUser } from '@/contexts/UserContext';
+import { uploadProfilePhoto } from '@/services/storage.service';
 
 export default function ProfileScreen() {
   const { user } = useAuth();
@@ -27,15 +30,69 @@ export default function ProfileScreen() {
   
   const [displayName, setDisplayName] = useState(userProfile?.displayName || '');
   const [bio, setBio] = useState(userProfile?.bio || '');
+  const [avatarUri, setAvatarUri] = useState(userProfile?.avatarUrl || '');
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   // Sync local state with userProfile when it loads/updates
   useEffect(() => {
     if (userProfile) {
       setDisplayName(userProfile.displayName);
       setBio(userProfile.bio || '');
+      setAvatarUri(userProfile.avatarUrl || '');
     }
   }, [userProfile]);
+
+  const handleSelectImage = async () => {
+    try {
+      // Request permissions
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'Please grant photo library access to upload a profile photo.'
+        );
+        return;
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        
+        // Show loading state
+        setIsUploadingImage(true);
+        
+        try {
+          // Upload to Firebase Storage
+          const downloadURL = await uploadProfilePhoto(user!.uid, imageUri);
+          
+          // Update user profile with new avatar URL
+          await updateProfile({ avatarUrl: downloadURL });
+          
+          // Update local state
+          setAvatarUri(downloadURL);
+          
+          Alert.alert('Success', 'Profile photo updated successfully');
+        } catch (error: any) {
+          console.error('Error uploading image:', error);
+          Alert.alert('Error', 'Failed to upload image. Please try again.');
+        } finally {
+          setIsUploadingImage(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error selecting image:', error);
+      Alert.alert('Error', 'Failed to select image');
+    }
+  };
 
   const handleSave = async () => {
     if (!displayName.trim()) {
@@ -88,12 +145,29 @@ export default function ProfileScreen() {
       >
         {/* Profile Avatar */}
         <View style={styles.avatarSection}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {displayName.charAt(0).toUpperCase() || '?'}
-            </Text>
-          </View>
+          <TouchableOpacity
+            style={styles.avatarTouchable}
+            onPress={handleSelectImage}
+            disabled={isUploadingImage}
+          >
+            <View style={styles.avatar}>
+              {isUploadingImage ? (
+                <ActivityIndicator size="large" color="#fff" />
+              ) : avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarText}>
+                  {displayName.charAt(0).toUpperCase() || '?'}
+                </Text>
+              )}
+            </View>
+            {/* Camera icon overlay */}
+            <View style={styles.cameraIconContainer}>
+              <Text style={styles.cameraIcon}>✏️</Text>
+            </View>
+          </TouchableOpacity>
           <Text style={styles.username}>@{userProfile?.username}</Text>
+          <Text style={styles.avatarHint}>Tap to change photo</Text>
         </View>
 
         {/* Form Section */}
@@ -229,6 +303,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
   },
+  avatarTouchable: {
+    position: 'relative',
+    marginBottom: 12,
+  },
   avatar: {
     width: 100,
     height: 100,
@@ -236,17 +314,42 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 100,
+    height: 100,
   },
   avatarText: {
     fontSize: 40,
     fontWeight: '600',
     color: '#fff',
   },
+  cameraIconContainer: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#007AFF',
+    borderWidth: 2,
+    borderColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cameraIcon: {
+    fontSize: 16,
+  },
   username: {
     fontSize: 16,
     color: '#8E8E93',
     fontWeight: '500',
+    marginBottom: 4,
+  },
+  avatarHint: {
+    fontSize: 12,
+    color: '#8E8E93',
   },
   formSection: {
     backgroundColor: '#fff',

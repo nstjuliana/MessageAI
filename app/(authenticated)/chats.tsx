@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   RefreshControl,
   StyleSheet,
   Text,
@@ -272,9 +273,16 @@ export default function ChatsScreen() {
           onPress={() => router.push('/(authenticated)/profile')}
         >
           <View style={styles.profileAvatar}>
-            <Text style={styles.profileAvatarText}>
-              {userProfile?.displayName?.charAt(0).toUpperCase() || '?'}
-            </Text>
+            {userProfile?.avatarUrl ? (
+              <Image
+                source={{ uri: userProfile.avatarUrl }}
+                style={styles.profileAvatarImage}
+              />
+            ) : (
+              <Text style={styles.profileAvatarText}>
+                {userProfile?.displayName?.charAt(0).toUpperCase() || '?'}
+              </Text>
+            )}
             {/* Status indicator */}
             <View style={[
               styles.profilePresenceDot,
@@ -383,6 +391,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
+    overflow: 'hidden',
+  },
+  profileAvatarImage: {
+    width: 50,
+    height: 50,
   },
   profileAvatarText: {
     color: '#fff',
