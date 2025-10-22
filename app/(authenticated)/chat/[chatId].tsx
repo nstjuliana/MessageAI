@@ -456,18 +456,20 @@ export default function ChatScreen() {
           {chat?.type === 'dm' ? (
             // DM: Show profile picture with status indicator
             <View style={styles.headerAvatarContainer}>
-              <View style={styles.headerAvatar}>
-                {getOtherParticipant()?.avatarUrl ? (
-                  <Image 
-                    source={{ uri: getOtherParticipant()?.avatarUrl }} 
-                    style={styles.headerAvatarImage} 
-                  />
-                ) : (
-                  <Text style={styles.headerAvatarText}>
-                    {getOtherParticipant()?.displayName?.charAt(0).toUpperCase() || '?'}
-                  </Text>
-                )}
-                {/* Status indicator */}
+              <View style={styles.headerAvatarWrapper}>
+                <View style={styles.headerAvatar}>
+                  {getOtherParticipant()?.avatarUrl ? (
+                    <Image 
+                      source={{ uri: getOtherParticipant()?.avatarUrl }} 
+                      style={styles.headerAvatarImage} 
+                    />
+                  ) : (
+                    <Text style={styles.headerAvatarText}>
+                      {getOtherParticipant()?.displayName?.charAt(0).toUpperCase() || '?'}
+                    </Text>
+                  )}
+                </View>
+                {/* Status indicator - sibling of avatar, not child */}
                 <View style={[
                   styles.statusDot,
                   { backgroundColor: getPresenceColor(getOtherParticipant()?.presence) }
@@ -617,6 +619,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerAvatarWrapper: {
+    position: 'relative',
+    width: 40,
+    height: 40,
+  },
   headerAvatar: {
     width: 40,
     height: 40,
@@ -624,7 +631,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
     justifyContent: 'center',
     alignItems: 'center',
-    position: 'relative',
     overflow: 'hidden',
   },
   headerAvatarImage: {

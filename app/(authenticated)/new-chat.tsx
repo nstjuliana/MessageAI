@@ -5,14 +5,14 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -129,14 +129,16 @@ export default function NewChatScreen() {
         onPress={() => handleSelectUser(item)}
         disabled={creating}
       >
-        {/* Avatar */}
-        <View style={styles.avatar}>
-          {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-          ) : (
-            <Text style={styles.avatarText}>{item.displayName.charAt(0).toUpperCase()}</Text>
-          )}
-          {/* Presence indicator */}
+        {/* Avatar with presence indicator */}
+        <View style={styles.avatarWrapper}>
+          <View style={styles.avatar}>
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarText}>{item.displayName.charAt(0).toUpperCase()}</Text>
+            )}
+          </View>
+          {/* Presence indicator - sibling of avatar, not child */}
           <View style={[styles.presenceIndicator, { backgroundColor: presenceColor }]} />
         </View>
 
@@ -294,6 +296,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
+  avatarWrapper: {
+    position: 'relative',
+    width: 50,
+    height: 50,
+    marginRight: 12,
+  },
   avatar: {
     width: 50,
     height: 50,
@@ -301,8 +309,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-    position: 'relative',
     overflow: 'hidden',
   },
   avatarImage: {
