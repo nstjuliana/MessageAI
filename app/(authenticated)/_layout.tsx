@@ -89,6 +89,12 @@ export default function AuthenticatedLayout() {
               headerShown: false,
             }} 
           />
+          <Stack.Screen 
+            name="profile" 
+            options={{ 
+              headerShown: false,
+            }} 
+          />
         </Stack>
       </View>
     </ActivityProvider>

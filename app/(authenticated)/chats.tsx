@@ -261,10 +261,34 @@ export default function ChatsScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Chats</Text>
-        <TouchableOpacity onPress={logOut} style={styles.logoutButton}>
-          <Text style={styles.logoutText}>Logout</Text>
+        {/* Left: Title */}
+        <View style={styles.headerLeft}>
+          <Text style={styles.headerTitle}>Chats</Text>
+        </View>
+        
+        {/* Center: Profile Photo with Status */}
+        <TouchableOpacity 
+          style={styles.profileContainer}
+          onPress={() => router.push('/(authenticated)/profile')}
+        >
+          <View style={styles.profileAvatar}>
+            <Text style={styles.profileAvatarText}>
+              {userProfile?.displayName?.charAt(0).toUpperCase() || '?'}
+            </Text>
+            {/* Status indicator */}
+            <View style={[
+              styles.profilePresenceDot,
+              { backgroundColor: getPresenceColor('online') } // User is always online in this screen
+            ]} />
+          </View>
         </TouchableOpacity>
+        
+        {/* Right: Logout */}
+        <View style={styles.headerRight}>
+          <TouchableOpacity onPress={logOut} style={styles.logoutButton}>
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Chat List */}
@@ -337,10 +361,47 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e0e0e0',
     backgroundColor: '#fff',
   },
+  headerLeft: {
+    flex: 1,
+    alignItems: 'flex-start',
+  },
   headerTitle: {
     fontSize: 32,
     fontWeight: 'bold',
     color: '#000',
+  },
+  profileContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16, // Add some padding around the profile
+  },
+  profileAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  profileAvatarText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  profilePresenceDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  headerRight: {
+    flex: 1,
+    alignItems: 'flex-end',
   },
   logoutButton: {
     padding: 8,
