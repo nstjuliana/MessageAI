@@ -14,10 +14,10 @@ import { executeStatement, getDatabase } from '@/database/database';
 import type { CreateMessageData, Message, MessageStatus } from '@/types/chat.types';
 import NetInfo from '@react-native-community/netinfo';
 import {
-    doc,
-    serverTimestamp,
-    setDoc,
-    updateDoc
+  doc,
+  serverTimestamp,
+  setDoc,
+  updateDoc
 } from 'firebase/firestore';
 
 const CHATS_COLLECTION = 'chats';
