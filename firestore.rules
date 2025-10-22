@@ -67,6 +67,16 @@ service cloud.firestore {
         // Users can only write their own read receipt
         allow write: if isOwner(userId);
       }
+      
+      // Typing indicators subcollection
+      match /typing/{userId} {
+        // Participants can read all typing statuses in their chats
+        allow read: if isAuthenticated() && 
+                       request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
+        
+        // Users can only write their own typing status
+        allow write: if isOwner(userId);
+      }
     }
     
     // Usernames collection (for username uniqueness enforcement)

@@ -24,6 +24,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { db } from '@/config/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePresenceTracking } from '@/hooks/usePresenceTracking';
+import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 import { getChatById, onChatMessagesSnapshot } from '@/services/chat.service';
 import {
   getMessagesFromSQLite,
@@ -31,6 +32,7 @@ import {
   syncMessageToSQLite,
 } from '@/services/message.service';
 import { getUsersByIds } from '@/services/user.service';
+import { onTypingStatusChange } from '@/services/typing.service';
 import type { Chat, Message, MessageStatus } from '@/types/chat.types';
 import type { PublicUserProfile } from '@/types/user.types';
 
@@ -38,6 +40,7 @@ export default function ChatScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
   const { user } = useAuth();
   const { resetActivityTimer } = usePresenceTracking();
+  const { onTypingStart, clearTyping } = useTypingIndicator(chatId || null, user?.uid || null);
   
   const [chat, setChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -46,6 +49,7 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sending, setSending] = useState(false);
+  const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
   
   const flatListRef = useRef<FlatList>(null);
   
@@ -180,6 +184,22 @@ export default function ChatScreen() {
     };
   }, [chat, user]);
 
+  // Listen for typing status changes
+  useEffect(() => {
+    if (!chatId || !user) return;
+
+    console.log(`👀 Setting up typing status listener for chat: ${chatId}`);
+
+    const unsubscribe = onTypingStatusChange(chatId, user.uid, (typingIds) => {
+      setTypingUserIds(typingIds);
+    });
+
+    return () => {
+      console.log(`👋 Cleaning up typing status listener for chat: ${chatId}`);
+      unsubscribe();
+    };
+  }, [chatId, user]);
+
   const handleSend = async () => {
     if (!messageText.trim() || !user || !chatId || sending) return;
 
@@ -187,6 +207,9 @@ export default function ChatScreen() {
     const textToSend = messageText.trim();
     setMessageText(''); // Clear input immediately for better UX
     setSending(true);
+
+    // Clear typing status when sending
+    clearTyping();
 
     try {
       // Send message with optimistic UI
@@ -342,6 +365,25 @@ export default function ChatScreen() {
     </View>
   );
 
+  const getTypingText = (): string => {
+    if (typingUserIds.length === 0) return '';
+    
+    if (typingUserIds.length === 1) {
+      // Single user typing
+      const typingUser = participants[typingUserIds[0]];
+      const name = typingUser?.displayName || 'Someone';
+      return `${name} is typing...`;
+    } else if (typingUserIds.length === 2) {
+      // Two users typing
+      const user1 = participants[typingUserIds[0]]?.displayName || 'Someone';
+      const user2 = participants[typingUserIds[1]]?.displayName || 'Someone';
+      return `${user1} and ${user2} are typing...`;
+    } else {
+      // Multiple users typing
+      return `${typingUserIds.length} people are typing...`;
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -442,13 +484,25 @@ export default function ChatScreen() {
         />
       </View>
 
+      {/* Typing Indicator */}
+      {typingUserIds.length > 0 && (
+        <View style={styles.typingIndicator}>
+          <Text style={styles.typingText}>
+            {getTypingText()}
+          </Text>
+        </View>
+      )}
+
       {/* Message Input - Positioned at bottom */}
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
           placeholder="Type a message..."
           value={messageText}
-          onChangeText={setMessageText}
+          onChangeText={(text) => {
+            setMessageText(text);
+            onTypingStart();
+          }}
           onFocus={resetActivityTimer}
           multiline
           maxLength={1000}
@@ -679,6 +733,16 @@ const styles = StyleSheet.create({
   },
   statusQueued: {
     color: 'rgba(255, 255, 255, 0.5)', // Dimmer for queued
+  },
+  typingIndicator: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+  },
+  typingText: {
+    fontSize: 13,
+    color: '#8E8E93',
+    fontStyle: 'italic',
   },
   inputContainer: {
     flexDirection: 'row',

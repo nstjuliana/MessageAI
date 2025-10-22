@@ -143,23 +143,23 @@
 93. [x] Queue messages sent while offline
 
 ### Deployment Checkpoint #2
-94. [ ] Deploy messaging functionality to Expo Go
-95. [ ] Test real-time messaging between two devices
-96. [ ] Test offline message queueing (airplane mode)
-97. [ ] Test message persistence (force quit and reopen)
-98. [ ] Verify messages sync correctly after reconnection
+94. [x] Deploy messaging functionality to Expo Go
+95. [x] Test real-time messaging between two devices
+96. [x] Test offline message queueing (airplane mode)
+97. [x] Test message persistence (force quit and reopen)
+98. [x] Verify messages sync correctly after reconnection
 
 ---
 
 ## Phase 3: MVP - Message Status & Read Receipts (Hours 13-16)
 
 ### Typing Indicators
-99. [ ] Add typing status to Firestore (`chats/{chatId}/typing/{userId}`)
-100. [ ] Update typing status on TextInput change (debounced)
-101. [ ] Clear typing status after 3 seconds of inactivity
-102. [ ] Listen for other users' typing status
-103. [ ] Display "User is typing..." indicator in chat
-104. [ ] Handle multiple users typing in groups
+99.  [x] Add typing status to Firestore (`chats/{chatId}/typing/{userId}`)
+100. [x] Update typing status on TextInput change (debounced)
+101. [x] Clear typing status after 3 seconds of inactivity
+102. [x] Listen for other users' typing status
+103. [x] Display "User is typing..." indicator in chat
+104. [x] Handle multiple users typing in groups
 
 ### Message Delivery Status (DM)
 105. [ ] Update message status to "delivered" when recipient receives
