@@ -23,6 +23,42 @@ import {
 const CHATS_COLLECTION = 'chats';
 const MESSAGES_COLLECTION = 'messages';
 
+// Retry configuration
+const MAX_RETRY_ATTEMPTS = 5;
+const BASE_RETRY_DELAY = 1000; // 1 second
+const MAX_RETRY_DELAY = 60000; // 60 seconds (1 minute)
+
+/**
+ * Calculate exponential backoff delay
+ * Formula: min(BASE_DELAY * 2^retryCount, MAX_DELAY)
+ * Example: 1s, 2s, 4s, 8s, 16s, 32s, 60s (capped)
+ */
+function calculateBackoffDelay(retryCount: number): number {
+  const delay = BASE_RETRY_DELAY * Math.pow(2, retryCount);
+  return Math.min(delay, MAX_RETRY_DELAY);
+}
+
+/**
+ * Check if a message should be retried based on last retry time
+ */
+function shouldRetryMessage(retryCount: number, lastRetryAt: number | null): boolean {
+  // If never retried, allow retry
+  if (!lastRetryAt) return true;
+  
+  // If max retries reached, don't retry
+  if (retryCount >= MAX_RETRY_ATTEMPTS) {
+    console.log(`⚠️ Max retry attempts (${MAX_RETRY_ATTEMPTS}) reached`);
+    return false;
+  }
+  
+  // Calculate required delay based on retry count
+  const requiredDelay = calculateBackoffDelay(retryCount);
+  const timeSinceLastRetry = Date.now() - lastRetryAt;
+  
+  // Only retry if enough time has passed
+  return timeSinceLastRetry >= requiredDelay;
+}
+
 /**
  * Generate a unique local message ID
  * Uses timestamp + random string for uniqueness
@@ -394,7 +430,7 @@ export async function retryFailedMessage(
     const sql = `
       SELECT 
         id, chatId, senderId, text, mediaUrl, mediaMime, replyToId,
-        retryCount
+        retryCount, lastRetryAt
       FROM messages
       WHERE id = ? AND (status = 'failed' OR status = 'sending')
     `;
@@ -403,6 +439,19 @@ export async function retryFailedMessage(
     
     if (!row) {
       console.warn('Message not found or not in failed/sending state:', messageId);
+      return;
+    }
+    
+    // Check if we should retry based on exponential backoff
+    const retryCount = row.retryCount || 0;
+    const lastRetryAt = row.lastRetryAt || null;
+    
+    if (!shouldRetryMessage(retryCount, lastRetryAt)) {
+      const nextRetryDelay = calculateBackoffDelay(retryCount);
+      const timeSinceLastRetry = lastRetryAt ? Date.now() - lastRetryAt : 0;
+      const remainingTime = Math.ceil((nextRetryDelay - timeSinceLastRetry) / 1000);
+      
+      console.log(`⏳ Message ${messageId} - retry ${retryCount + 1}/${MAX_RETRY_ATTEMPTS} in ${remainingTime}s`);
       return;
     }
     
@@ -419,7 +468,7 @@ export async function retryFailedMessage(
       createdAt: Date.now(), // Use original timestamp ideally
     };
     
-    console.log('🔄 Retrying failed message:', messageId);
+    console.log(`🔄 Retrying message ${messageId} (attempt ${retryCount + 1}/${MAX_RETRY_ATTEMPTS})`);
     
     // Update status to "sending"
     await updateMessageStatusInSQLite(messageId, 'sending', false);
@@ -445,8 +494,16 @@ export async function retryFailedMessage(
       console.error('❌ Message retry failed:', error);
       
       // Increment retry count
-      const newRetryCount = (row.retryCount || 0) + 1;
+      const newRetryCount = retryCount + 1;
       await updateMessageRetryInfo(messageId, newRetryCount);
+      
+      // Log backoff information
+      if (newRetryCount < MAX_RETRY_ATTEMPTS) {
+        const nextRetryDelay = calculateBackoffDelay(newRetryCount);
+        console.log(`⏳ Will retry again in ${nextRetryDelay / 1000}s (attempt ${newRetryCount + 1}/${MAX_RETRY_ATTEMPTS})`);
+      } else {
+        console.log(`❌ Max retry attempts reached (${MAX_RETRY_ATTEMPTS}). Message will not be retried.`);
+      }
       
       if (onStatusChange) onStatusChange(messageId, 'failed');
     }

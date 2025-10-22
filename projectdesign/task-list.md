@@ -138,7 +138,7 @@
 88. [x] Implement retry mechanism for failed messages
 89. [x] Listen to network state changes with NetInfo
 90. [x] Trigger message retry on reconnection
-91. [ ] Implement exponential backoff for retries
+91. [x] Implement exponential backoff for retries
 92. [ ] Display offline indicator when network unavailable
 93. [x] Queue messages sent while offline
 
