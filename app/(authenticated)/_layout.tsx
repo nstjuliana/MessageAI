@@ -6,8 +6,9 @@
 
 import { Redirect, Stack, usePathname } from 'expo-router';
 import { useEffect } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
+import { ActivityProvider } from '@/contexts/ActivityContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNetworkRetry } from '@/hooks/useNetworkRetry';
 import { usePresenceTrackingRTDB } from '@/hooks/usePresenceTrackingRTDB';
@@ -44,27 +45,53 @@ export default function AuthenticatedLayout() {
   }
 
   // User is authenticated, render the protected screens
+  // Handle all touches to reset activity timer (for presence tracking)
+  const handleTouchActivity = () => {
+    resetActivityTimer();
+  };
+
   return (
-    <Pressable style={{ flex: 1 }} onPress={resetActivityTimer}>
-      <Stack
-        screenOptions={{
-          headerShown: false, // Hide header for all screens by default
+    <ActivityProvider resetActivityTimer={resetActivityTimer}>
+      <View 
+        style={{ flex: 1 }}
+        collapsable={false}
+        onTouchStart={handleTouchActivity}
+        onTouchMove={handleTouchActivity}
+        onStartShouldSetResponderCapture={() => {
+          handleTouchActivity();
+          return false; // Don't capture, let children handle the touch
+        }}
+        onMoveShouldSetResponderCapture={() => {
+          handleTouchActivity();
+          return false; // Don't capture, let children handle scrolling
         }}
       >
-        <Stack.Screen 
-          name="chats" 
-          options={{ 
-            headerShown: false,
-          }} 
-        />
-        <Stack.Screen 
-          name="new-chat" 
-          options={{ 
-            headerShown: false,
-          }} 
-        />
-      </Stack>
-    </Pressable>
+        <Stack
+          screenOptions={{
+            headerShown: false, // Hide header for all screens by default
+          }}
+        >
+          <Stack.Screen 
+            name="chats" 
+            options={{ 
+              headerShown: false,
+            }} 
+          />
+          <Stack.Screen 
+            name="new-chat" 
+            options={{ 
+              headerShown: false,
+            }} 
+          />
+          <Stack.Screen 
+            name="chat/[chatId]" 
+            options={{ 
+              headerShown: false,
+            }} 
+          />
+        </Stack>
+      </View>
+    </ActivityProvider>
   );
 }
 

@@ -6,27 +6,28 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    FlatList,
+    KeyboardAvoidingView,
+    Platform,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useActivity } from '@/contexts/ActivityContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 import { getChatById, onChatMessagesSnapshot } from '@/services/chat.service';
 import {
-  getMessagesFromSQLite,
-  markMessageAsDelivered,
-  sendMessageOptimistic,
-  syncMessageToSQLite,
+    getMessagesFromSQLite,
+    markMessageAsDelivered,
+    sendMessageOptimistic,
+    syncMessageToSQLite,
 } from '@/services/message.service';
 import { onUsersPresenceChange } from '@/services/presence.service';
 import { onTypingStatusChange } from '@/services/typing-rtdb.service';
@@ -37,6 +38,7 @@ import type { PublicUserProfile } from '@/types/user.types';
 export default function ChatScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
   const { user } = useAuth();
+  const { resetActivityTimer } = useActivity();
   const { onTypingStart, clearTyping } = useTypingIndicator(chatId || null, user?.uid || null);
   
   const [chat, setChat] = useState<Chat | null>(null);
@@ -424,9 +426,6 @@ export default function ChatScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={-30}
       enabled
-      onStartShouldSetResponder={() => {
-        return false; // Don't capture the event, just track it
-      }}
     >
       {/* Header */}
       <View style={styles.header}>
@@ -490,6 +489,9 @@ export default function ChatScreen() {
             tintColor="#007AFF"
           />
         }
+        // Track scrolling activity for presence
+        onScroll={resetActivityTimer}
+        scrollEventThrottle={1000}
         // Enable proper scrolling
         showsVerticalScrollIndicator={true}
         bounces={true}
@@ -522,6 +524,7 @@ export default function ChatScreen() {
           onChangeText={(text) => {
             setMessageText(text);
             onTypingStart();
+            resetActivityTimer(); // Reset away timer when user types
           }}
           multiline
           maxLength={1000}
@@ -800,4 +803,5 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
 });
+
 

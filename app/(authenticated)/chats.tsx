@@ -6,15 +6,16 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    FlatList,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
+import { useActivity } from '@/contexts/ActivityContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUser } from '@/contexts/UserContext';
 import { onUserChatsSnapshot } from '@/services/chat.service';
@@ -26,6 +27,7 @@ import type { User, UserPresence } from '@/types/user.types';
 export default function ChatsScreen() {
   const { user, logOut } = useAuth();
   const { userProfile } = useUser();
+  const { resetActivityTimer } = useActivity();
   const [chats, setChats] = useState<Chat[]>([]);
   const [chatParticipants, setChatParticipants] = useState<Record<string, User>>({});
   const [presenceData, setPresenceData] = useState<Record<string, { status: UserPresence; lastSeen: number }>>({});
@@ -201,7 +203,7 @@ export default function ChatsScreen() {
       <TouchableOpacity
         style={styles.chatItem}
         onPress={() => {
-          router.push(`/chat/${item.id}` as any);
+          router.push(`/(authenticated)/chat/${item.id}` as any);
         }}
       >
         {/* Avatar placeholder with presence indicator */}
@@ -275,6 +277,8 @@ export default function ChatsScreen() {
         ListEmptyComponent={renderEmptyState}
         bounces={true}
         showsVerticalScrollIndicator={true}
+        onScroll={resetActivityTimer}
+        scrollEventThrottle={1000}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

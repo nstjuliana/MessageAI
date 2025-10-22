@@ -14,9 +14,9 @@ import { AppState, AppStateStatus } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
 import {
-    setUserOffline,
-    setUserOnline,
-    updateUserPresence
+  setUserOffline,
+  setUserOnline,
+  updateUserPresence
 } from '@/services/presence.service';
 import { UserPresence } from '@/types/user.types';
 
@@ -131,27 +131,28 @@ export function usePresenceTrackingRTDB() {
   const resetActivityTimer = async () => {
     if (!user) return;
 
+    // Always reset the away timer first
+    startAwayTimer();
+
     const now = Date.now();
     const timeSinceLastActivity = now - lastActivityTime.current;
 
-    // Debounce: Don't process if activity happened < 2 seconds ago
+    // If we're away, ALWAYS update to online (no debounce for away->online)
+    if (currentStatus === 'away') {
+      console.log('👆 User activity detected - resetting to online from away');
+      lastActivityTime.current = now;
+      await updateUserPresence(user.uid, 'online');
+      setCurrentStatus('online');
+      return;
+    }
+
+    // For online status, debounce writes (but still reset timer above)
     if (timeSinceLastActivity < 2000) {
-      // Just reset the timer, no need to check/update status
-      startAwayTimer();
+      // Already online and updated recently, just timer reset is enough
       return;
     }
 
     lastActivityTime.current = now;
-
-    // Only write if we were away (not if already online)
-    if (currentStatus === 'away') {
-      console.log('👆 User activity detected - resetting to online from away');
-      await updateUserPresence(user.uid, 'online');
-      setCurrentStatus('online');
-    }
-
-    // Always reset timer
-    startAwayTimer();
   };
 
   return {
