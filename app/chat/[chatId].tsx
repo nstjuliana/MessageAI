@@ -20,6 +20,7 @@ import {
 
 import { doc, onSnapshot } from 'firebase/firestore';
 
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { db } from '@/config/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePresenceTracking } from '@/hooks/usePresenceTracking';
@@ -393,7 +394,16 @@ export default function ChatScreen() {
             </View>
           )}
         </View>
-        <View style={styles.placeholder} />
+        <TouchableOpacity
+          onPress={() => {
+            resetActivityTimer();
+            // TODO: Open chat settings
+            console.log('Chat settings tapped');
+          }}
+          style={styles.settingsButton}
+        >
+          <IconSymbol name="gearshape.fill" size={32} color="#007AFF" />
+        </TouchableOpacity>
       </View>
 
       {/* Message List Container - Takes full available space */}
@@ -418,6 +428,8 @@ export default function ChatScreen() {
         // Enable proper scrolling
         showsVerticalScrollIndicator={true}
         bounces={true}
+        // Dismiss keyboard interactively when dragging through it
+        keyboardDismissMode="interactive"
         // Reset activity timer on scroll
         onScroll={resetActivityTimer}
         scrollEventThrottle={1000}
@@ -545,8 +557,11 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     marginTop: 2,
   },
-  placeholder: {
+  settingsButton: {
+    padding: 8,
     minWidth: 70,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
   },
   messageList: {
     paddingHorizontal: 16,
