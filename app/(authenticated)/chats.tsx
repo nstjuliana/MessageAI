@@ -20,8 +20,8 @@ import { useActivity } from '@/contexts/ActivityContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUser } from '@/contexts/UserContext';
 import { onUserChatsSnapshot } from '@/services/chat.service';
-import { onUsersPresenceChange } from '@/services/presence.service';
-import { getUsersByIds } from '@/services/user.service';
+import { onUserPresenceChange, onUsersPresenceChange } from '@/services/presence.service';
+import { onUsersProfilesSnapshot } from '@/services/user.service';
 import type { Chat } from '@/types/chat.types';
 import type { User, UserPresence } from '@/types/user.types';
 
@@ -32,6 +32,7 @@ export default function ChatsScreen() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [chatParticipants, setChatParticipants] = useState<Record<string, User>>({});
   const [presenceData, setPresenceData] = useState<Record<string, { status: UserPresence; lastSeen: number }>>({});
+  const [myPresence, setMyPresence] = useState<UserPresence>('online');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -46,33 +47,9 @@ export default function ChatsScreen() {
     console.log('Setting up chats listener for user:', user.uid);
     setLoading(true);
 
-    const unsubscribe = onUserChatsSnapshot(user.uid, async (updatedChats) => {
+    const unsubscribe = onUserChatsSnapshot(user.uid, (updatedChats) => {
       setChats(updatedChats);
       setLoading(false);
-      // Note: setRefreshing(false) is now handled by handleRefresh for manual refreshes
-
-      // Fetch participant info for all chats (from Firestore - profiles only)
-      const allParticipantIds = new Set<string>();
-      updatedChats.forEach(chat => {
-        chat.participantIds.forEach(id => {
-          if (id !== user.uid) { // Don't fetch current user
-            allParticipantIds.add(id);
-          }
-        });
-      });
-
-      if (allParticipantIds.size > 0) {
-        try {
-          const participants = await getUsersByIds(Array.from(allParticipantIds));
-          const participantsMap: Record<string, User> = {};
-          participants.forEach(participant => {
-            participantsMap[participant.id] = participant;
-          });
-          setChatParticipants(participantsMap);
-        } catch (error) {
-          console.error('Error fetching participants:', error);
-        }
-      }
     });
 
     return () => {
@@ -80,6 +57,39 @@ export default function ChatsScreen() {
       unsubscribe();
     };
   }, [user]);
+
+  // Subscribe to participant profiles in real-time (including avatars)
+  useEffect(() => {
+    if (!user || chats.length === 0) return;
+
+    // Collect all participant IDs from chats
+    const allParticipantIds = new Set<string>();
+    chats.forEach(chat => {
+      chat.participantIds.forEach(id => {
+        if (id !== user.uid) { // Don't fetch current user
+          allParticipantIds.add(id);
+        }
+      });
+    });
+
+    if (allParticipantIds.size === 0) return;
+
+    console.log(`📡 Setting up real-time profile listeners for ${allParticipantIds.size} participants`);
+
+    // Set up real-time listeners for all participants
+    const unsubscribe = onUsersProfilesSnapshot(
+      Array.from(allParticipantIds),
+      (participantsMap) => {
+        console.log('🔄 Participant profiles updated:', Object.keys(participantsMap).length);
+        setChatParticipants(participantsMap);
+      }
+    );
+
+    return () => {
+      console.log('👋 Cleaning up profile listeners');
+      unsubscribe();
+    };
+  }, [user, chats]);
 
   // Subscribe to presence data for all participants (from RTDB)
   useEffect(() => {
@@ -99,6 +109,25 @@ export default function ChatsScreen() {
     };
   }, [chatParticipants]);
 
+  // Subscribe to current user's own presence (for header avatar)
+  useEffect(() => {
+    if (!user) return;
+
+    console.log('👁️ Setting up RTDB presence for current user');
+
+    const unsubscribe = onUserPresenceChange(user.uid, (presence) => {
+      if (presence) {
+        setMyPresence(presence.status);
+        console.log('🔄 My presence updated:', presence.status);
+      }
+    });
+
+    return () => {
+      console.log('👋 Cleaning up my presence listener');
+      unsubscribe();
+    };
+  }, [user]);
+
   const handleRefresh = async () => {
     if (refreshing) return; // Prevent multiple simultaneous refreshes
 
@@ -108,32 +137,13 @@ export default function ChatsScreen() {
       if (user) {
         console.log('🔄 Pull-to-refresh triggered for user:', user.uid);
 
-        // Force refresh of participant data (usernames, display names, etc.)
-        if (chats.length > 0) {
-          const allParticipantIds = new Set<string>();
-          chats.forEach(chat => {
-            chat.participantIds.forEach(id => {
-              if (id !== user.uid) { // Don't fetch current user
-                allParticipantIds.add(id);
-              }
-            });
-          });
-
-          if (allParticipantIds.size > 0) {
-            console.log(`🔄 Refreshing ${allParticipantIds.size} participant profiles`);
-            const participants = await getUsersByIds(Array.from(allParticipantIds));
-            const participantsMap: Record<string, User> = {};
-            participants.forEach(participant => {
-              participantsMap[participant.id] = participant;
-            });
-            setChatParticipants(participantsMap);
-            console.log('✅ Participant profiles refreshed');
-          }
-        }
+        // Profiles are already being updated in real-time by listeners
+        // Just show the refresh animation for UX
 
         // Show refresh indicator for at least 1 second for good UX
         setTimeout(() => {
           setRefreshing(false);
+          console.log('✅ Refresh complete (real-time data already synced)');
         }, 1000);
       } else {
         setRefreshing(false);
@@ -150,6 +160,7 @@ export default function ChatsScreen() {
         title: chat.groupName || 'Unnamed Group',
         subtitle: chat.lastMessageText || 'No messages yet',
         presence: 'offline' as UserPresence,
+        avatarUrl: undefined,
       };
     }
 
@@ -158,10 +169,13 @@ export default function ChatsScreen() {
     const otherParticipant = otherParticipantId ? chatParticipants[otherParticipantId] : null;
     const presence = otherParticipantId ? presenceData[otherParticipantId]?.status || 'offline' : 'offline';
 
+    console.log('otherParticipant', otherParticipant?.displayName, otherParticipant?.avatarUrl);
+
     return {
       title: otherParticipant?.displayName || 'Unknown User',
       subtitle: chat.lastMessageText || 'No messages yet',
       presence,
+      avatarUrl: otherParticipant?.avatarUrl,
     };
   };
 
@@ -198,7 +212,7 @@ export default function ChatsScreen() {
   };
 
   const renderChatItem = ({ item }: { item: Chat }) => {
-    const { title, subtitle, presence } = getChatDisplayInfo(item);
+    const { title, subtitle, presence, avatarUrl } = getChatDisplayInfo(item);
 
     return (
       <TouchableOpacity
@@ -207,12 +221,16 @@ export default function ChatsScreen() {
           router.push(`/(authenticated)/chat/${item.id}` as any);
         }}
       >
-        {/* Avatar placeholder with presence indicator */}
+        {/* Avatar with presence indicator */}
         <View style={styles.avatarContainer}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {title.charAt(0).toUpperCase()}
-            </Text>
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarText}>
+                {title.charAt(0).toUpperCase()}
+              </Text>
+            )}
           </View>
           {/* Show presence dot for DM chats only */}
           {item.type === 'dm' && (
@@ -272,21 +290,23 @@ export default function ChatsScreen() {
           style={styles.profileContainer}
           onPress={() => router.push('/(authenticated)/profile')}
         >
-          <View style={styles.profileAvatar}>
-            {userProfile?.avatarUrl ? (
-              <Image
-                source={{ uri: userProfile.avatarUrl }}
-                style={styles.profileAvatarImage}
-              />
-            ) : (
-              <Text style={styles.profileAvatarText}>
-                {userProfile?.displayName?.charAt(0).toUpperCase() || '?'}
-              </Text>
-            )}
-            {/* Status indicator */}
+          <View style={styles.profileAvatarWrapper}>
+            <View style={styles.profileAvatar}>
+              {userProfile?.avatarUrl ? (
+                <Image
+                  source={{ uri: userProfile.avatarUrl }}
+                  style={styles.profileAvatarImage}
+                />
+              ) : (
+                <Text style={styles.profileAvatarText}>
+                  {userProfile?.displayName?.charAt(0).toUpperCase() || '?'}
+                </Text>
+              )}
+            </View>
+            {/* Status indicator - sibling of avatar, not child */}
             <View style={[
               styles.profilePresenceDot,
-              { backgroundColor: getPresenceColor('online') } // User is always online in this screen
+              { backgroundColor: getPresenceColor(myPresence) }
             ]} />
           </View>
         </TouchableOpacity>
@@ -383,6 +403,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 16, // Add some padding around the profile
   },
+  profileAvatarWrapper: {
+    position: 'relative',
+    width: 50,
+    height: 50,
+  },
   profileAvatar: {
     width: 50,
     height: 50,
@@ -390,7 +415,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
     justifyContent: 'center',
     alignItems: 'center',
-    position: 'relative',
     overflow: 'hidden',
   },
   profileAvatarImage: {
@@ -441,11 +465,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 56,
+    height: 56,
   },
   presenceDot: {
     position: 'absolute',
-    bottom: 2,
-    right: 2,
+    bottom: 0,
+    right: 0,
     width: 14,
     height: 14,
     borderRadius: 7,

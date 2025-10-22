@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     FlatList,
+    Image,
     StyleSheet,
     Text,
     TextInput,
@@ -17,13 +18,14 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { findOrCreateDMChat } from '@/services/chat.service';
 import { onUsersPresenceChange } from '@/services/presence.service';
-import { searchUsers } from '@/services/user.service';
-import type { PublicUserProfile, UserPresence } from '@/types/user.types';
+import { onUsersProfilesSnapshot, searchUsers } from '@/services/user.service';
+import type { PublicUserProfile, User, UserPresence } from '@/types/user.types';
 
 export default function NewChatScreen() {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<PublicUserProfile[]>([]);
+  const [profileData, setProfileData] = useState<Record<string, User>>({});
   const [presenceData, setPresenceData] = useState<Record<string, { status: UserPresence; lastSeen: number }>>({});
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -49,6 +51,24 @@ export default function NewChatScreen() {
       setLoading(false);
     }
   };
+
+  // Subscribe to profile data for search results (real-time avatarUrl updates)
+  useEffect(() => {
+    const userIds = searchResults.map(user => user.id);
+    if (userIds.length === 0) return;
+
+    console.log(`📡 Setting up real-time profile listeners for ${userIds.length} search results`);
+
+    const unsubscribe = onUsersProfilesSnapshot(userIds, (profilesMap) => {
+      console.log('🔄 Search result profiles updated:', Object.keys(profilesMap).length);
+      setProfileData(profilesMap);
+    });
+
+    return () => {
+      console.log('👋 Cleaning up profile listeners for search');
+      unsubscribe();
+    };
+  }, [searchResults]);
 
   // Subscribe to presence data for search results (from RTDB)
   useEffect(() => {
@@ -99,6 +119,10 @@ export default function NewChatScreen() {
         ? '#FF9500'
         : '#8E8E93';
 
+    // Get latest profile data (including avatarUrl) from real-time listener
+    const profile = profileData[item.id];
+    const avatarUrl = profile?.avatarUrl || item.avatarUrl;
+
     return (
       <TouchableOpacity
         style={styles.userItem}
@@ -107,7 +131,11 @@ export default function NewChatScreen() {
       >
         {/* Avatar */}
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{item.displayName.charAt(0).toUpperCase()}</Text>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+          ) : (
+            <Text style={styles.avatarText}>{item.displayName.charAt(0).toUpperCase()}</Text>
+          )}
           {/* Presence indicator */}
           <View style={[styles.presenceIndicator, { backgroundColor: presenceColor }]} />
         </View>
@@ -275,6 +303,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 12,
     position: 'relative',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 50,
+    height: 50,
   },
   avatarText: {
     fontSize: 20,

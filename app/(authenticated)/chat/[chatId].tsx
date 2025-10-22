@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     FlatList,
+    Image,
     KeyboardAvoidingView,
     Platform,
     RefreshControl,
@@ -31,7 +32,7 @@ import {
 } from '@/services/message.service';
 import { onUsersPresenceChange } from '@/services/presence.service';
 import { onTypingStatusChange } from '@/services/typing-rtdb.service';
-import { getUsersByIds } from '@/services/user.service';
+import { onUsersProfilesSnapshot } from '@/services/user.service';
 import type { Chat, Message, MessageStatus } from '@/types/chat.types';
 import type { PublicUserProfile } from '@/types/user.types';
 
@@ -91,27 +92,7 @@ export default function ChatScreen() {
         }
         setChat(chatData);
 
-        // 3. Load participant profiles (background)
-        const participantIds = chatData.participantIds.filter(id => id !== user.uid);
-        if (participantIds.length > 0) {
-          const profiles = await getUsersByIds(participantIds);
-          const profilesMap: Record<string, PublicUserProfile> = {};
-          profiles.forEach(profile => {
-            profilesMap[profile.id] = {
-              id: profile.id,
-              username: profile.username,
-              displayName: profile.displayName,
-              avatarUrl: profile.avatarUrl,
-              bio: profile.bio,
-              // Don't use stale Firestore presence - will be set by RTDB listener
-              presence: 'offline', // Default to offline until RTDB updates it
-              lastSeen: profile.lastSeen,
-            };
-          });
-          setParticipants(profilesMap);
-        }
-
-        // 4. Listen to messages in real-time from Firestore
+        // 3. Listen to messages in real-time from Firestore
         unsubscribeMessages = onChatMessagesSnapshot(chatId, async (firestoreMessages) => {
           messagesFromFirestore = firestoreMessages;
           
@@ -182,6 +163,41 @@ export default function ChatScreen() {
       }
     };
   }, [chatId, user]);
+
+  // Subscribe to participant profiles in real-time (including avatars)
+  useEffect(() => {
+    if (!chatId || !user || !chat) return;
+
+    const participantIds = chat.participantIds.filter(id => id !== user.uid);
+    if (participantIds.length === 0) return;
+
+    console.log(`📡 Setting up real-time profile listeners for ${participantIds.length} participant(s)`);
+
+    const unsubscribe = onUsersProfilesSnapshot(participantIds, (profilesMap) => {
+      console.log('🔄 Participant profiles updated:', Object.keys(profilesMap).length);
+      
+      // Convert to PublicUserProfile format
+      const publicProfilesMap: Record<string, PublicUserProfile> = {};
+      Object.entries(profilesMap).forEach(([id, profile]) => {
+        publicProfilesMap[id] = {
+          id: profile.id,
+          username: profile.username,
+          displayName: profile.displayName,
+          avatarUrl: profile.avatarUrl,
+          bio: profile.bio,
+          presence: 'offline', // Will be updated by RTDB listener
+          lastSeen: profile.lastSeen,
+        };
+      });
+      
+      setParticipants(publicProfilesMap);
+    });
+
+    return () => {
+      console.log('👋 Cleaning up profile listeners');
+      unsubscribe();
+    };
+  }, [chatId, user, chat]);
 
   // Subscribe to presence data for all participants (from RTDB)
   // Same pattern as chats.tsx - store presence separately to avoid infinite loops
@@ -322,9 +338,13 @@ export default function ChatScreen() {
         {/* Avatar for received messages in groups */}
         {!isSent && chat?.type === 'group' && (
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {sender?.displayName?.charAt(0).toUpperCase() || '?'}
-            </Text>
+            {sender?.avatarUrl ? (
+              <Image source={{ uri: sender.avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarText}>
+                {sender?.displayName?.charAt(0).toUpperCase() || '?'}
+              </Text>
+            )}
           </View>
         )}
 
@@ -437,9 +457,16 @@ export default function ChatScreen() {
             // DM: Show profile picture with status indicator
             <View style={styles.headerAvatarContainer}>
               <View style={styles.headerAvatar}>
-                <Text style={styles.headerAvatarText}>
-                  {getOtherParticipant()?.displayName?.charAt(0).toUpperCase() || '?'}
-                </Text>
+                {getOtherParticipant()?.avatarUrl ? (
+                  <Image 
+                    source={{ uri: getOtherParticipant()?.avatarUrl }} 
+                    style={styles.headerAvatarImage} 
+                  />
+                ) : (
+                  <Text style={styles.headerAvatarText}>
+                    {getOtherParticipant()?.displayName?.charAt(0).toUpperCase() || '?'}
+                  </Text>
+                )}
                 {/* Status indicator */}
                 <View style={[
                   styles.statusDot,
@@ -598,6 +625,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
+    overflow: 'hidden',
+  },
+  headerAvatarImage: {
+    width: 40,
+    height: 40,
   },
   headerAvatarText: {
     color: '#fff',
@@ -690,6 +722,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 32,
+    height: 32,
   },
   avatarText: {
     color: '#fff',

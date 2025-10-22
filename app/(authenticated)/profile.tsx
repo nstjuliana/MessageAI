@@ -72,17 +72,21 @@ export default function ProfileScreen() {
         
         try {
           // Upload to Firebase Storage
+          console.log('🖼️ Uploading photo for user:', user!.uid);
           const downloadURL = await uploadProfilePhoto(user!.uid, imageUri);
+          console.log('✅ Got download URL:', downloadURL);
           
           // Update user profile with new avatar URL
+          console.log('💾 Updating Firestore with avatarUrl...');
           await updateProfile({ avatarUrl: downloadURL });
+          console.log('✅ Firestore updated successfully');
           
           // Update local state
           setAvatarUri(downloadURL);
           
           Alert.alert('Success', 'Profile photo updated successfully');
         } catch (error: any) {
-          console.error('Error uploading image:', error);
+          console.error('❌ Error uploading image:', error);
           Alert.alert('Error', 'Failed to upload image. Please try again.');
         } finally {
           setIsUploadingImage(false);

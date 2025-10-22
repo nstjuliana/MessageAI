@@ -246,13 +246,15 @@ export async function updateUser(
   userData: UpdateUserData
 ): Promise<void> {
   try {
+    console.log('📝 Updating user in Firestore:', userId, userData);
     const userRef = doc(db, USERS_COLLECTION, userId);
     await updateDoc(userRef, {
       ...userData,
       updatedAt: serverTimestamp(),
     });
+    console.log('✅ User updated in Firestore successfully');
   } catch (error) {
-    console.error('Error updating user:', error);
+    console.error('❌ Error updating user:', error);
     throw new Error('Failed to update user profile.');
   }
 }
@@ -458,6 +460,53 @@ export function onUserSnapshot(
 }
 
 /**
+ * Listen to full profile changes for multiple users
+ * @param userIds - Array of user IDs to listen to
+ * @param callback - Function to call when any user's profile changes
+ * @returns Unsubscribe function to stop listening
+ */
+export function onUsersProfilesSnapshot(
+  userIds: string[],
+  callback: (users: Record<string, User>) => void
+): Unsubscribe {
+  if (userIds.length === 0) {
+    return () => {}; // Return empty unsubscribe function
+  }
+
+  const unsubscribers: Unsubscribe[] = [];
+  const usersMap: Record<string, User> = {};
+
+  userIds.forEach((userId) => {
+    console.log('🔔 Setting up listener for user:', userId);
+    const unsubscribe = onUserSnapshot(userId, (user) => {
+      if (user) {
+        usersMap[userId] = user;
+        console.log('✅ Profile updated for user:', userId);
+        console.log('   - displayName:', user.displayName);
+        console.log('   - avatarUrl:', user.avatarUrl || '(none)');
+        console.log('   - All fields:', JSON.stringify({
+          id: user.id,
+          username: user.username,
+          displayName: user.displayName,
+          avatarUrl: user.avatarUrl,
+        }));
+      } else {
+        console.log('⚠️ User not found:', userId);
+        delete usersMap[userId];
+      }
+      // Call callback with updated map
+      callback({ ...usersMap });
+    });
+    unsubscribers.push(unsubscribe);
+  });
+
+  // Return a function that unsubscribes from all listeners
+  return () => {
+    unsubscribers.forEach((unsubscribe) => unsubscribe());
+  };
+}
+
+/**
  * Listen to presence changes for multiple users
  * @param userIds - Array of user IDs to listen to
  * @param callback - Function to call when any user's presence changes
@@ -523,7 +572,11 @@ export async function deleteUser(userId: string): Promise<void> {
  * Handles Firestore Timestamp conversion
  */
 function firestoreUserToUser(userId: string, data: any): User {
-  return {
+  console.log('📄 Raw Firestore data for user:', userId);
+  console.log('   - avatarUrl field:', data.avatarUrl);
+  console.log('   - all fields:', Object.keys(data));
+  
+  const user = {
     id: userId,
     username: data.username || '',
     displayName: data.displayName || '',
@@ -537,6 +590,9 @@ function firestoreUserToUser(userId: string, data: any): User {
     createdAt: firestoreTimestampToMillis(data.createdAt),
     updatedAt: firestoreTimestampToMillis(data.updatedAt),
   };
+  
+  console.log('✅ Converted user object - avatarUrl:', user.avatarUrl || '(none)');
+  return user;
 }
 
 /**
