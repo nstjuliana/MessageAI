@@ -6,29 +6,29 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    FlatList,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useUser } from '@/contexts/UserContext';
-import { usePresenceTracking } from '@/hooks/usePresenceTracking';
 import { onUserChatsSnapshot } from '@/services/chat.service';
+import { onUsersPresenceChange } from '@/services/presence.service';
 import { getUsersByIds } from '@/services/user.service';
 import type { Chat } from '@/types/chat.types';
-import type { User } from '@/types/user.types';
+import type { User, UserPresence } from '@/types/user.types';
 
 export default function ChatsScreen() {
   const { user, logOut } = useAuth();
   const { userProfile } = useUser();
-  const { resetActivityTimer } = usePresenceTracking();
   const [chats, setChats] = useState<Chat[]>([]);
   const [chatParticipants, setChatParticipants] = useState<Record<string, User>>({});
+  const [presenceData, setPresenceData] = useState<Record<string, { status: UserPresence; lastSeen: number }>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -48,7 +48,7 @@ export default function ChatsScreen() {
       setLoading(false);
       // Note: setRefreshing(false) is now handled by handleRefresh for manual refreshes
 
-      // Fetch participant info for all chats
+      // Fetch participant info for all chats (from Firestore - profiles only)
       const allParticipantIds = new Set<string>();
       updatedChats.forEach(chat => {
         chat.participantIds.forEach(id => {
@@ -78,10 +78,27 @@ export default function ChatsScreen() {
     };
   }, [user]);
 
+  // Subscribe to presence data for all participants (from RTDB)
+  useEffect(() => {
+    const participantIds = Object.keys(chatParticipants);
+    if (participantIds.length === 0) return;
+
+    console.log(`👁️ Setting up RTDB presence for ${participantIds.length} participants`);
+
+    const unsubscribe = onUsersPresenceChange(participantIds, (presenceMap) => {
+      console.log('🔄 Presence data updated from RTDB:', Object.keys(presenceMap).length, 'users');
+      setPresenceData(presenceMap);
+    });
+
+    return () => {
+      console.log('👋 Cleaning up RTDB presence listeners');
+      unsubscribe();
+    };
+  }, [chatParticipants]);
+
   const handleRefresh = async () => {
     if (refreshing) return; // Prevent multiple simultaneous refreshes
 
-    resetActivityTimer();
     setRefreshing(true);
 
     try {
@@ -129,16 +146,19 @@ export default function ChatsScreen() {
       return {
         title: chat.groupName || 'Unnamed Group',
         subtitle: chat.lastMessageText || 'No messages yet',
+        presence: 'offline' as UserPresence,
       };
     }
 
-    // DM chat - get other participant's name
+    // DM chat - get other participant's name and presence
     const otherParticipantId = chat.participantIds.find(id => id !== user?.uid);
     const otherParticipant = otherParticipantId ? chatParticipants[otherParticipantId] : null;
+    const presence = otherParticipantId ? presenceData[otherParticipantId]?.status || 'offline' : 'offline';
 
     return {
       title: otherParticipant?.displayName || 'Unknown User',
       subtitle: chat.lastMessageText || 'No messages yet',
+      presence,
     };
   };
 
@@ -163,22 +183,38 @@ export default function ChatsScreen() {
     }
   };
 
+  const getPresenceColor = (presence: UserPresence) => {
+    switch (presence) {
+      case 'online':
+        return '#34C759'; // Green
+      case 'away':
+        return '#FF9500'; // Orange
+      default:
+        return '#8E8E93'; // Gray
+    }
+  };
+
   const renderChatItem = ({ item }: { item: Chat }) => {
-    const { title, subtitle } = getChatDisplayInfo(item);
+    const { title, subtitle, presence } = getChatDisplayInfo(item);
 
     return (
       <TouchableOpacity
         style={styles.chatItem}
         onPress={() => {
-          resetActivityTimer();
           router.push(`/chat/${item.id}` as any);
         }}
       >
-        {/* Avatar placeholder */}
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {title.charAt(0).toUpperCase()}
-          </Text>
+        {/* Avatar placeholder with presence indicator */}
+        <View style={styles.avatarContainer}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {title.charAt(0).toUpperCase()}
+            </Text>
+          </View>
+          {/* Show presence dot for DM chats only */}
+          {item.type === 'dm' && (
+            <View style={[styles.presenceDot, { backgroundColor: getPresenceColor(presence) }]} />
+          )}
         </View>
 
         {/* Chat info */}
@@ -239,8 +275,6 @@ export default function ChatsScreen() {
         ListEmptyComponent={renderEmptyState}
         bounces={true}
         showsVerticalScrollIndicator={true}
-        onScroll={resetActivityTimer}
-        scrollEventThrottle={1000}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -254,7 +288,6 @@ export default function ChatsScreen() {
       <TouchableOpacity
         style={styles.fab}
         onPress={() => {
-          resetActivityTimer();
           router.push('/(authenticated)/new-chat');
         }}
       >
@@ -319,6 +352,10 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f0f0f0',
     backgroundColor: '#fff',
   },
+  avatarContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
   avatar: {
     width: 56,
     height: 56,
@@ -326,7 +363,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+  },
+  presenceDot: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   avatarText: {
     fontSize: 24,

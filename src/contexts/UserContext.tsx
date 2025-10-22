@@ -6,7 +6,8 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
-import { onUserSnapshot, updatePresence, updateUser } from '@/services/user.service';
+import { updateUserPresence } from '@/services/presence.service';
+import { onUserSnapshot, updateUser } from '@/services/user.service';
 import type { UpdateUserData, User } from '@/types/user.types';
 
 import { useAuth } from './AuthContext';
@@ -66,13 +67,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     // Profile will update automatically via the listener
   };
 
-  // Update user presence
+  // Update user presence (using RTDB)
   const handleSetPresence = async (presence: 'online' | 'offline' | 'away'): Promise<void> => {
     if (!user) {
       throw new Error('No authenticated user');
     }
-    await updatePresence(user.uid, presence);
-    // Profile will update automatically via the listener
+    await updateUserPresence(user.uid, presence);
+    // Note: Presence is tracked in RTDB, not Firestore
+    // This function is here for manual control if needed
   };
 
   // Force refresh profile (rarely needed due to real-time listener)

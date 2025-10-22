@@ -13,6 +13,8 @@ service cloud.firestore {
     }
     
     // Users collection
+    // NOTE: User presence (online/offline/away) is now tracked in Realtime Database
+    // See database.rules.json for presence rules
     match /users/{userId} {
       // Anyone authenticated can read any user profile (for search, chat participants, etc.)
       allow read: if isAuthenticated();
@@ -78,15 +80,8 @@ service cloud.firestore {
         allow write: if isOwner(userId);
       }
       
-      // Typing indicators subcollection
-      match /typing/{userId} {
-        // Participants can read all typing statuses in their chats
-        allow read: if isAuthenticated() && 
-                       request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
-        
-        // Users can only write their own typing status
-        allow write: if isOwner(userId);
-      }
+      // NOTE: Typing indicators have been moved to Realtime Database
+      // See database.rules.json for typing indicator rules
     }
     
     // Usernames collection (for username uniqueness enforcement)

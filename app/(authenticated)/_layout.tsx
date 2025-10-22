@@ -10,14 +10,14 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useNetworkRetry } from '@/hooks/useNetworkRetry';
-import { usePresenceTracking } from '@/hooks/usePresenceTracking';
+import { usePresenceTrackingRTDB } from '@/hooks/usePresenceTrackingRTDB';
 
 export default function AuthenticatedLayout() {
   const { user, loading } = useAuth();
   const pathname = usePathname();
   
-  // Track user presence (online/offline/away) and update lastSeen
-  const { resetActivityTimer } = usePresenceTracking();
+  // Track user presence (online/offline/away) using RTDB
+  const { resetActivityTimer } = usePresenceTrackingRTDB();
   
   // Enable automatic message retry when network reconnects (app-wide)
   useNetworkRetry();

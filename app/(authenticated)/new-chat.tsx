@@ -3,7 +3,7 @@
  */
 
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     FlatList,
@@ -15,21 +15,20 @@ import {
 } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { usePresenceTracking } from '@/hooks/usePresenceTracking';
 import { findOrCreateDMChat } from '@/services/chat.service';
+import { onUsersPresenceChange } from '@/services/presence.service';
 import { searchUsers } from '@/services/user.service';
-import type { PublicUserProfile } from '@/types/user.types';
+import type { PublicUserProfile, UserPresence } from '@/types/user.types';
 
 export default function NewChatScreen() {
   const { user } = useAuth();
-  const { resetActivityTimer } = usePresenceTracking();
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<PublicUserProfile[]>([]);
+  const [presenceData, setPresenceData] = useState<Record<string, { status: UserPresence; lastSeen: number }>>({});
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
 
   const handleSearch = async (term: string) => {
-    resetActivityTimer();
     setSearchTerm(term);
 
     if (!term || term.trim().length === 0) {
@@ -51,10 +50,26 @@ export default function NewChatScreen() {
     }
   };
 
+  // Subscribe to presence data for search results (from RTDB)
+  useEffect(() => {
+    const userIds = searchResults.map(user => user.id);
+    if (userIds.length === 0) return;
+
+    console.log(`👁️ Setting up RTDB presence for ${userIds.length} search results`);
+
+    const unsubscribe = onUsersPresenceChange(userIds, (presenceMap) => {
+      setPresenceData(presenceMap);
+    });
+
+    return () => {
+      console.log('👋 Cleaning up RTDB presence listeners for search');
+      unsubscribe();
+    };
+  }, [searchResults]);
+
   const handleSelectUser = async (selectedUser: PublicUserProfile) => {
     if (!user) return;
 
-    resetActivityTimer();
     setCreating(true);
     try {
       console.log(`Creating/finding chat with ${selectedUser.displayName}...`);
@@ -65,9 +80,7 @@ export default function NewChatScreen() {
       console.log(`✅ Chat ready: ${chat.id}`);
 
       // Navigate to chat screen
-      // TODO: Implement chat screen in next task
-      router.back();
-      console.log(`TODO: Navigate to chat screen with ID: ${chat.id}`);
+      router.push(`/chat/${chat.id}` as any);
     } catch (error: any) {
       console.error('Failed to create chat:', error);
       alert(`Failed to create chat: ${error.message}`);
@@ -77,10 +90,12 @@ export default function NewChatScreen() {
   };
 
   const renderUserItem = ({ item }: { item: PublicUserProfile }) => {
+    // Get presence from RTDB (not stale Firestore data)
+    const presence = presenceData[item.id]?.status || 'offline';
     const presenceColor =
-      item.presence === 'online'
+      presence === 'online'
         ? '#34C759'
-        : item.presence === 'away'
+        : presence === 'away'
         ? '#FF9500'
         : '#8E8E93';
 

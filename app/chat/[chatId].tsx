@@ -18,12 +18,8 @@ import {
   View
 } from 'react-native';
 
-import { doc, onSnapshot } from 'firebase/firestore';
-
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { db } from '@/config/firebase';
 import { useAuth } from '@/contexts/AuthContext';
-import { usePresenceTracking } from '@/hooks/usePresenceTracking';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 import { getChatById, onChatMessagesSnapshot } from '@/services/chat.service';
 import {
@@ -32,7 +28,8 @@ import {
   sendMessageOptimistic,
   syncMessageToSQLite,
 } from '@/services/message.service';
-import { onTypingStatusChange } from '@/services/typing.service';
+import { onUsersPresenceChange } from '@/services/presence.service';
+import { onTypingStatusChange } from '@/services/typing-rtdb.service';
 import { getUsersByIds } from '@/services/user.service';
 import type { Chat, Message, MessageStatus } from '@/types/chat.types';
 import type { PublicUserProfile } from '@/types/user.types';
@@ -40,12 +37,12 @@ import type { PublicUserProfile } from '@/types/user.types';
 export default function ChatScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
   const { user } = useAuth();
-  const { resetActivityTimer } = usePresenceTracking();
   const { onTypingStart, clearTyping } = useTypingIndicator(chatId || null, user?.uid || null);
   
   const [chat, setChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [participants, setParticipants] = useState<Record<string, PublicUserProfile>>({});
+  const [presenceData, setPresenceData] = useState<Record<string, { status: 'online' | 'offline' | 'away'; lastSeen: number }>>({});
   const [messageText, setMessageText] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -104,7 +101,8 @@ export default function ChatScreen() {
               displayName: profile.displayName,
               avatarUrl: profile.avatarUrl,
               bio: profile.bio,
-              presence: profile.presence,
+              // Don't use stale Firestore presence - will be set by RTDB listener
+              presence: 'offline', // Default to offline until RTDB updates it
               lastSeen: profile.lastSeen,
             };
           });
@@ -183,41 +181,24 @@ export default function ChatScreen() {
     };
   }, [chatId, user]);
 
-  // Listen for real-time presence updates for DM participant
+  // Subscribe to presence data for all participants (from RTDB)
+  // Same pattern as chats.tsx - store presence separately to avoid infinite loops
   useEffect(() => {
-    if (!chat || chat.type === 'group' || !user) return;
+    const participantIds = Object.keys(participants);
+    if (participantIds.length === 0) return;
 
-    const otherParticipantId = chat.participantIds.find(id => id !== user.uid);
-    if (!otherParticipantId) return;
+    console.log(`👁️ Setting up RTDB presence for ${participantIds.length} participant(s)`);
 
-    console.log(`👁️ Setting up presence listener for user: ${otherParticipantId}`);
-
-    // Listen to the other user's document for presence changes
-    const userRef = doc(db, 'users', otherParticipantId);
-    const unsubscribe = onSnapshot(userRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const userData = snapshot.data();
-        console.log(`🔄 Presence updated for ${otherParticipantId}:`, userData.presence);
-        
-        // Update the participant's presence in state
-        setParticipants(prev => ({
-          ...prev,
-          [otherParticipantId]: {
-            ...prev[otherParticipantId],
-            presence: userData.presence || 'offline',
-            lastSeen: userData.lastSeen,
-          },
-        }));
-      }
-    }, (error) => {
-      console.error('Error listening to presence:', error);
+    const unsubscribe = onUsersPresenceChange(participantIds, (presenceMap) => {
+      console.log('🔄 Presence data updated from RTDB:', Object.keys(presenceMap).length, 'user(s)');
+      setPresenceData(presenceMap);
     });
 
     return () => {
-      console.log(`👋 Cleaning up presence listener for user: ${otherParticipantId}`);
+      console.log(`👋 Cleaning up RTDB presence listeners`);
       unsubscribe();
     };
-  }, [chat, user]);
+  }, [participants]);
 
   // Listen for typing status changes
   useEffect(() => {
@@ -238,7 +219,6 @@ export default function ChatScreen() {
   const handleSend = async () => {
     if (!messageText.trim() || !user || !chatId || sending) return;
 
-    resetActivityTimer();
     const textToSend = messageText.trim();
     setMessageText(''); // Clear input immediately for better UX
     setSending(true);
@@ -280,7 +260,6 @@ export default function ChatScreen() {
   };
 
   const handleRefresh = async () => {
-    resetActivityTimer();
     setRefreshing(true);
     // TODO: Load older messages
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -303,7 +282,18 @@ export default function ChatScreen() {
   const getOtherParticipant = () => {
     if (!chat || chat.type === 'group') return null;
     const otherParticipantId = chat.participantIds.find(id => id !== user?.uid);
-    return otherParticipantId ? participants[otherParticipantId] : null;
+    if (!otherParticipantId) return null;
+    
+    // Merge participant data with live presence from RTDB
+    const participant = participants[otherParticipantId];
+    if (!participant) return null;
+    
+    const presence = presenceData[otherParticipantId];
+    return {
+      ...participant,
+      presence: presence?.status || 'offline',
+      lastSeen: presence?.lastSeen || participant.lastSeen,
+    };
   };
 
   const getPresenceColor = (presence?: 'online' | 'away' | 'offline'): string => {
@@ -435,7 +425,6 @@ export default function ChatScreen() {
       keyboardVerticalOffset={-30}
       enabled
       onStartShouldSetResponder={() => {
-        resetActivityTimer();
         return false; // Don't capture the event, just track it
       }}
     >
@@ -473,7 +462,6 @@ export default function ChatScreen() {
         </View>
         <TouchableOpacity
           onPress={() => {
-            resetActivityTimer();
             // TODO: Open chat settings
             console.log('Chat settings tapped');
           }}
@@ -507,9 +495,6 @@ export default function ChatScreen() {
         bounces={true}
         // Dismiss keyboard interactively when dragging through it
         keyboardDismissMode="interactive"
-        // Reset activity timer on scroll
-        onScroll={resetActivityTimer}
-        scrollEventThrottle={1000}
         // Auto-scroll to bottom when new messages arrive (normal order)
         onContentSizeChange={() => {
           if (messages.length > 0 && flatListRef.current) {
@@ -538,7 +523,6 @@ export default function ChatScreen() {
             setMessageText(text);
             onTypingStart();
           }}
-          onFocus={resetActivityTimer}
           multiline
           maxLength={1000}
           editable={!sending}
