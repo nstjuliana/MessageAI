@@ -25,6 +25,7 @@ import { onUserPresenceChange, onUsersPresenceChange } from '@/services/presence
 import { onUsersProfilesSnapshot } from '@/services/user.service';
 import type { Chat } from '@/types/chat.types';
 import type { PublicUserProfile, User, UserPresence } from '@/types/user.types';
+import Screen from '../../components/Screen';
 
 export default function ChatsScreen() {
   const { user, logOut } = useAuth();
@@ -314,50 +315,53 @@ export default function ChatsScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        {/* Left: Title */}
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>Chats</Text>
-        </View>
-        
-        {/* Center: Profile Photo with Status */}
-        <TouchableOpacity 
-          style={styles.profileContainer}
-          onPress={() => router.push('/(authenticated)/profile')}
-        >
-          <View style={styles.profileAvatarWrapper}>
-            <View style={styles.profileAvatar}>
-              {userProfile?.avatarUrl ? (
-                <Image
-                  source={{ uri: userProfile.avatarUrl }}
-                  style={styles.profileAvatarImage}
-                />
-              ) : (
-                <Text style={styles.profileAvatarText}>
-                  {userProfile?.displayName?.charAt(0).toUpperCase() || '?'}
-                </Text>
-              )}
-            </View>
-            {/* Status indicator - sibling of avatar, not child */}
-            <View style={[
-              styles.profilePresenceDot,
-              { backgroundColor: getPresenceColor(myPresence) }
-            ]} />
+    <Screen>
+      <Screen.Header>
+        {/* Header */}
+        <View style={styles.header}>
+          {/* Left: Title */}
+          <View style={styles.headerLeft}>
+            <Text style={styles.headerTitle}>Chats</Text>
           </View>
-        </TouchableOpacity>
-        
-        {/* Right: Logout */}
-        <View style={styles.headerRight}>
-          <TouchableOpacity onPress={logOut} style={styles.logoutButton}>
-            <Text style={styles.logoutText}>Logout</Text>
+          
+          {/* Center: Profile Photo with Status */}
+          <TouchableOpacity 
+            style={styles.profileContainer}
+            onPress={() => router.push('/(authenticated)/profile')}
+          >
+            <View style={styles.profileAvatarWrapper}>
+              <View style={styles.profileAvatar}>
+                {userProfile?.avatarUrl ? (
+                  <Image
+                    source={{ uri: userProfile.avatarUrl }}
+                    style={styles.profileAvatarImage}
+                  />
+                ) : (
+                  <Text style={styles.profileAvatarText}>
+                    {userProfile?.displayName?.charAt(0).toUpperCase() || '?'}
+                  </Text>
+                )}
+              </View>
+              {/* Status indicator - sibling of avatar, not child */}
+              <View style={[
+                styles.profilePresenceDot,
+                { backgroundColor: getPresenceColor(myPresence) }
+              ]} />
+            </View>
           </TouchableOpacity>
+          
+          {/* Right: Logout */}
+          <View style={styles.headerRight}>
+            <TouchableOpacity onPress={logOut} style={styles.logoutButton}>
+              <Text style={styles.logoutText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </Screen.Header>
 
-      {/* Chat List */}
-      <FlatList
+      <Screen.Content>
+        {/* Chat List */}
+        <FlatList
         style={{flex: 1, minHeight: '100%'}}
         data={chats}
         renderItem={renderChatItem}
@@ -377,25 +381,26 @@ export default function ChatsScreen() {
         }
       />
 
-      {/* New Chat FAB */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => {
-          router.push('/(authenticated)/new-chat');
-        }}
-      >
-        <Text style={styles.fabIcon}>✏️</Text>
-      </TouchableOpacity>
+        {/* New Chat FAB */}
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => {
+            router.push('/(authenticated)/new-chat');
+          }}
+        >
+          <Text style={styles.fabIcon}>✏️</Text>
+        </TouchableOpacity>
 
-      {/* Debug info */}
-      {__DEV__ && (
-        <View style={styles.debugInfo}>
-          <Text style={styles.debugText}>
-            {userProfile?.displayName} • {chats.length} chats
-          </Text>
-        </View>
-      )}
-    </View>
+        {/* Debug info */}
+        {__DEV__ && (
+          <View style={styles.debugInfo}>
+            <Text style={styles.debugText}>
+              {userProfile?.displayName} • {chats.length} chats
+            </Text>
+          </View>
+        )}
+      </Screen.Content>
+    </Screen>
   );
 }
 

@@ -37,6 +37,7 @@ import { onTypingStatusChange } from '@/services/typing-rtdb.service';
 import { onUsersProfilesSnapshot } from '@/services/user.service';
 import type { Chat, Message, MessageStatus } from '@/types/chat.types';
 import type { PublicUserProfile } from '@/types/user.types';
+import Screen from '../../../components/Screen';
 
 // Memoized Message Item Component for performance
 const MessageItem = React.memo(({ 
@@ -596,14 +597,10 @@ export default function ChatScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={-30}
-      enabled
-    >
-      {/* Header */}
-      <View style={styles.header}>
+    <Screen>
+      <Screen.Header>
+        {/* Header */}
+        <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Text style={styles.backText}>‹ Back</Text>
         </TouchableOpacity>
@@ -668,9 +665,17 @@ export default function ChatScreen() {
           <IconSymbol name="gearshape.fill" size={32} color="#007AFF" />
         </TouchableOpacity>
       </View>
+      </Screen.Header>
 
-      {/* Message List Container - Takes full available space */}
-      <View style={styles.messageListContainer}>
+      <Screen.Content>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={-30}
+          enabled
+        >
+          {/* Message List Container - Takes full available space */}
+          <View style={styles.messageListContainer}>
         <FlatList
         ref={flatListRef}
         data={messages}
@@ -754,7 +759,9 @@ export default function ChatScreen() {
           )}
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </Screen.Content>
+    </Screen>
   );
 }
 

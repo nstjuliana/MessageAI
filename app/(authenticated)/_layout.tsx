@@ -10,6 +10,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { ActivityProvider } from '@/contexts/ActivityContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { NetworkProvider } from '@/contexts/NetworkContext';
 import { NotificationProvider, useNotifications } from '@/contexts/NotificationContext';
 import { ProfileCacheProvider } from '@/contexts/ProfileCacheContext';
 import { useInAppNotifications } from '@/hooks/useInAppNotifications';
@@ -115,11 +116,13 @@ export default function AuthenticatedLayout() {
 
   // User is authenticated, wrap with providers
   return (
-    <ProfileCacheProvider>
-      <NotificationProvider>
-        <AuthenticatedContent />
-      </NotificationProvider>
-    </ProfileCacheProvider>
+    <NetworkProvider>
+      <ProfileCacheProvider>
+        <NotificationProvider>
+          <AuthenticatedContent />
+        </NotificationProvider>
+      </ProfileCacheProvider>
+    </NetworkProvider>
   );
 }
 
