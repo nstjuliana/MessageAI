@@ -14,6 +14,7 @@ import { ChatSyncProvider } from '@/contexts/ChatSyncContext';
 import { NetworkProvider } from '@/contexts/NetworkContext';
 import { NotificationProvider, useNotifications } from '@/contexts/NotificationContext';
 import { ProfileCacheProvider } from '@/contexts/ProfileCacheContext';
+import { useGlobalMessageListeners } from '@/hooks/useGlobalMessageListeners';
 import { useInAppNotifications } from '@/hooks/useInAppNotifications';
 import { useNetworkRetry } from '@/hooks/useNetworkRetry';
 import { usePresenceTrackingRTDB } from '@/hooks/usePresenceTrackingRTDB';
@@ -27,6 +28,9 @@ function AuthenticatedContent() {
   
   // Enable automatic message retry when network reconnects (app-wide)
   useNetworkRetry();
+  
+  // Enable global message listeners for all chats (app-wide)
+  useGlobalMessageListeners();
   
   // Enable in-app notifications
   useInAppNotifications();

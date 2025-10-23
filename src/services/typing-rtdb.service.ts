@@ -10,13 +10,13 @@
 
 import { rtdb } from '@/config/firebase';
 import {
-    onDisconnect,
-    onValue,
-    ref,
-    remove,
-    serverTimestamp,
-    set,
-    type Unsubscribe
+  onDisconnect,
+  onValue,
+  ref,
+  remove,
+  serverTimestamp,
+  set,
+  type Unsubscribe
 } from 'firebase/database';
 
 const TYPING_PATH = 'typing';
@@ -46,7 +46,6 @@ export async function setUserTyping(
     // Auto-clear typing status on disconnect
     await onDisconnect(typingRef).remove();
 
-    console.log(`✍️ Set typing status for user ${userId} in chat ${chatId}`);
   } catch (error) {
     console.error('Failed to set typing status:', error);
     // Don't throw - typing indicators are not critical
@@ -68,7 +67,6 @@ export async function clearUserTyping(
     const typingRef = ref(rtdb, `${TYPING_PATH}/${chatId}/${userId}`);
     await remove(typingRef);
 
-    console.log(`🛑 Cleared typing status for user ${userId} in chat ${chatId}`);
   } catch (error) {
     console.error('Failed to clear typing status:', error);
     // Don't throw - typing indicators are not critical
@@ -107,7 +105,6 @@ export function onTypingStatusChange(
         });
       }
 
-      console.log(`👀 Typing users in chat ${chatId}:`, typingUserIds);
       callback(typingUserIds);
     },
     (error) => {

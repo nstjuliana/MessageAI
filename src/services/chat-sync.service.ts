@@ -20,7 +20,7 @@ import {
     where
 } from 'firebase/firestore';
 
-import { cacheMedia } from './media-cache.service';
+import { syncMessageToSQLite } from './message.service';
 
 const CHATS_COLLECTION = 'chats';
 const MESSAGES_COLLECTION = 'messages';
@@ -105,75 +105,10 @@ async function syncChatMessages(chatId: string): Promise<number> {
     
     console.log(`📝 Fetched ${messages.length} messages from Firestore`);
     
-    // Store messages in SQLite
-    const sqlite = getDatabase();
-    
+    // Store messages in SQLite using the centralized sync function
+    // This handles UPSERT logic and media caching automatically
     for (const message of messages) {
-      // Check if message already exists
-      const existingMessage = await sqlite.getFirstAsync<{ id: string }>(
-        'SELECT id FROM messages WHERE id = ?',
-        [message.id]
-      );
-      
-      if (existingMessage) {
-        // Update existing message
-        const updateSql = `
-          UPDATE messages 
-          SET text = ?, mediaUrl = ?, mediaMime = ?, status = ?,
-              edited = ?, editedAt = ?, syncedToFirestore = 1
-          WHERE id = ?
-        `;
-        
-        await executeStatement(updateSql, [
-          message.text || null,
-          message.mediaUrl || null,
-          message.mediaMime || null,
-          message.status,
-          message.edited ? 1 : 0,
-          message.editedAt || null,
-          message.id,
-        ]);
-      } else {
-        // Insert new message
-        const insertSql = `
-          INSERT INTO messages (
-            id, chatId, senderId, text, mediaUrl, mediaMime, replyToId,
-            status, createdAt, edited, editedAt, syncedToFirestore
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-        `;
-        
-        await executeStatement(insertSql, [
-          message.id,
-          message.chatId,
-          message.senderId,
-          message.text || null,
-          message.mediaUrl || null,
-          message.mediaMime || null,
-          message.replyToId || null,
-          message.status,
-          message.createdAt,
-          message.edited ? 1 : 0,
-          message.editedAt || null,
-        ]);
-      }
-      
-      // Cache media attachment if present
-      if (message.mediaUrl) {
-        // Don't await - cache in background
-        cacheMedia(message.mediaUrl, message.mediaMime).then((localPath) => {
-          if (localPath) {
-            // Update message with local media path
-            executeStatement(
-              'UPDATE messages SET localMediaPath = ? WHERE id = ?',
-              [localPath, message.id]
-            ).catch((error) => {
-              console.error('❌ Failed to update localMediaPath:', error);
-            });
-          }
-        }).catch((error) => {
-          console.error('❌ Failed to cache media:', error);
-        });
-      }
+      await syncMessageToSQLite(message);
     }
     
     console.log(`✅ Synced ${messages.length} messages to SQLite`);

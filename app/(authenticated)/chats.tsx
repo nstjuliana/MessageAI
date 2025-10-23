@@ -4,7 +4,7 @@
  */
 
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -21,6 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProfileCache } from '@/contexts/ProfileCacheContext';
 import { useUser } from '@/contexts/UserContext';
 import { onUserChatsSnapshot } from '@/services/chat.service';
+import { markMessageAsDelivered } from '@/services/message.service';
 import { onUserPresenceChange, onUsersPresenceChange } from '@/services/presence.service';
 import { onUsersProfilesSnapshot } from '@/services/user.service';
 import type { Chat } from '@/types/chat.types';
@@ -38,6 +39,9 @@ export default function ChatsScreen() {
   const [myPresence, setMyPresence] = useState<UserPresence>('online');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Track which messages we've already marked as delivered to avoid duplicate writes
+  const deliveredMessagesRef = useRef<Set<string>>(new Set());
 
   // Subscribe to user's chats in real-time
   useEffect(() => {
@@ -50,9 +54,29 @@ export default function ChatsScreen() {
     console.log('Setting up chats listener for user:', user.uid);
     setLoading(true);
 
-    const unsubscribe = onUserChatsSnapshot(user.uid, (updatedChats) => {
+    const unsubscribe = onUserChatsSnapshot(user.uid, async (updatedChats) => {
       setChats(updatedChats);
       setLoading(false);
+      
+      // Mark unread messages from others as delivered
+      for (const chat of updatedChats) {
+        if (chat.lastMessageId && 
+            chat.lastMessageSenderId && 
+            chat.lastMessageSenderId !== user.uid &&
+            !deliveredMessagesRef.current.has(chat.lastMessageId)) {
+          // Mark as delivered
+          deliveredMessagesRef.current.add(chat.lastMessageId);
+          markMessageAsDelivered(
+            chat.id,
+            chat.lastMessageId,
+            user.uid,
+            chat.lastMessageSenderId
+          ).catch((error) => {
+            // Silent fail - delivery status is not critical
+            console.log('Could not mark message as delivered:', error);
+          });
+        }
+      }
     });
 
     return () => {

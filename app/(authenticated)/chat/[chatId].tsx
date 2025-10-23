@@ -25,12 +25,17 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { useProfileCache } from '@/contexts/ProfileCacheContext';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
-import { getChatFromSQLite, onChatMessagesSnapshot } from '@/services/chat.service';
+import {
+  getChatFromSQLite,
+  getLastSyncedTimestamp,
+  onMessageStatusUpdatesSnapshot,
+  onNewMessagesSnapshot
+} from '@/services/chat.service';
 import {
   getMessagesFromSQLite,
-  markMessageAsDelivered,
-  sendMessageOptimistic,
-  syncMessageToSQLite,
+  markAllMessagesAsRead,
+  markMessageAsRead,
+  sendMessageOptimistic
 } from '@/services/message.service';
 import { onUsersPresenceChange } from '@/services/presence.service';
 import { onTypingStatusChange } from '@/services/typing-rtdb.service';
@@ -97,19 +102,19 @@ const MessageItem = React.memo(({
             {isSent && (
               <View style={styles.statusContainer}>
                 {currentStatus === 'sending' && (
-                  <IconSymbol name="clock" size={12} color="#999" style={styles.statusIcon} />
+                  <Text style={[styles.statusText, { color: '#999' }]}>⏱</Text>
                 )}
                 {currentStatus === 'sent' && (
-                  <IconSymbol name="checkmark" size={12} color="#999" style={styles.statusIcon} />
+                  <Text style={[styles.statusText, { color: '#999' }]}>✓</Text>
                 )}
                 {currentStatus === 'delivered' && (
-                  <View style={styles.doubleCheck}>
-                    <IconSymbol name="checkmark" size={12} color="#999" style={styles.statusIcon} />
-                    <IconSymbol name="checkmark" size={12} color="#999" style={styles.statusIcon} />
-                  </View>
+                  <Text style={[styles.statusText, { color: '#999' }]}>✓✓</Text>
+                )}
+                {currentStatus === 'read' && (
+                  <Text style={[styles.statusText, { color: '#34C759' }]}>✓✓✓</Text>
                 )}
                 {currentStatus === 'failed' && (
-                  <IconSymbol name="exclamationmark.circle" size={12} color="#ff3b30" style={styles.statusIcon} />
+                  <Text style={[styles.statusText, { color: '#ff3b30' }]}>!</Text>
                 )}
               </View>
             )}
@@ -204,10 +209,7 @@ export default function ChatScreen() {
           const participantIds = chatDataFromSQLite.participantIds.filter(id => id !== user.uid);
           if (participantIds.length > 0) {
             getProfiles(participantIds).then(profiles => {
-              console.log('👤 Initial profiles loaded:', profiles);
-              Object.entries(profiles).forEach(([id, profile]) => {
-                console.log(`  - ${profile.displayName}: avatarUrl=${!!profile.avatarUrl}, avatarLocalPath=${!!profile.avatarLocalPath}`);
-              });
+
               setParticipants(profiles);
             });
           }
@@ -236,70 +238,49 @@ export default function ChatScreen() {
           console.log('⚠️ No local chat data - will be synced by background sync');
         }
 
-        // 4. Set up Firestore listener for real-time updates (background, non-blocking)
-        // This ONLY listens for new messages, doesn't fetch existing ones
-        console.log('🔄 Setting up Firestore listener for real-time updates...');
-        unsubscribeMessages = onChatMessagesSnapshot(chatId, async (firestoreMessages) => {
-          messagesFromFirestore = firestoreMessages;
+        // 4. Mark messages as read
+        markAllMessagesAsRead(chatId, user.uid).catch((error) => {
+          console.error('Failed to mark messages as read:', error);
+        });
+        
+        // 5. Set up LOCAL listeners for THIS chat (for instant UI updates)
+        // Global listeners handle SQLite syncing for all chats
+        // These listeners provide instant UI feedback for the active chat
+        const lastSynced = await getLastSyncedTimestamp(chatId);
+        
+        const unsubscribeNewMessages = onNewMessagesSnapshot(chatId, lastSynced, async (message) => {
+          console.log(`✅ [Local] New message: ${message.id}`);
           
-          // Track how many messages are actually new or updated
-          let newOrUpdatedCount = 0;
+          // Add to UI immediately
+          setMessages(prev => {
+            const exists = prev.some(m => m.id === message.id);
+            if (exists) return prev;
+            return [...prev, message].sort((a, b) => a.createdAt - b.createdAt);
+          });
           
-          // Sync Firestore messages to SQLite and mark as delivered
-          // Only process messages that are new or have changed status
-          for (const message of firestoreMessages) {
-            const messageHash = `${message.id}-${message.status}`;
-            const previousHash = processedMessagesRef.current.get(message.id);
-            
-            // Only sync if message is new or status has changed
-            if (previousHash !== messageHash) {
-              newOrUpdatedCount++;
-              await syncMessageToSQLite(message);
-              processedMessagesRef.current.set(message.id, messageHash);
-              
-              // Update messageStatuses for UI updates (fixes real-time status display)
-              setMessageStatuses(prev => ({
-                ...prev,
-                [message.id]: message.status
-              }));
-              
-              // Mark messages as delivered if:
-              // - Message status is 'sent' (not already delivered)
-              // - Current user is NOT the sender (recipient receiving the message)
-              // - We haven't already marked it (check previous status)
-              if (message.status === 'sent' && message.senderId !== user.uid && !previousHash?.includes('-delivered')) {
-                console.log(`📬 Marking message ${message.id} as delivered`);
-                await markMessageAsDelivered(chatId, message.id, user.uid, message.senderId);
-              }
-            }
-          }
-          
-          // Only log if there were actual changes
-          if (newOrUpdatedCount > 0) {
-            console.log(`📱 Synced ${newOrUpdatedCount} new/updated messages (${firestoreMessages.length} total)`);
-          }
-          
-          // Merge messages: Use Map to deduplicate by ID
-          const messageMap = new Map<string, Message>();
-          
-          // Add SQLite messages first
-          messagesFromSQLite.forEach(msg => messageMap.set(msg.id, msg));
-          
-          // Override with Firestore messages (they're the source of truth)
-          firestoreMessages.forEach(msg => messageMap.set(msg.id, msg));
-          
-          // Convert to array and sort by createdAt
-          const mergedMessages = Array.from(messageMap.values()).sort(
-            (a, b) => a.createdAt - b.createdAt
-          );
-          
-          setMessages(mergedMessages);
-          
-          // Mark first load complete after Firestore sync
-          if (isFirstLoadRef.current) {
-            isFirstLoadRef.current = false;
+          // Mark as read if from someone else (chat is open)
+          if (message.senderId !== user.uid) {
+            await markMessageAsRead(chatId, message.id, user.uid, message.senderId);
           }
         });
+        
+        const unsubscribeStatusUpdates = onMessageStatusUpdatesSnapshot(chatId, async (message) => {
+          console.log(`✅ [Local] Status update: ${message.id} → ${message.status}`);
+          
+          // Update in UI immediately
+          setMessages(prev => prev.map(m => m.id === message.id ? message : m));
+          setMessageStatuses(prev => ({
+            ...prev,
+            [message.id]: message.status
+          }));
+        });
+        
+        unsubscribeMessages = () => {
+          unsubscribeNewMessages();
+          unsubscribeStatusUpdates();
+        };
+        
+        isFirstLoadRef.current = false;
       } catch (error) {
         console.error('Error loading chat:', error);
         setLoading(false);
@@ -976,6 +957,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginLeft: 4,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   statusIcon: {
     marginLeft: 2,

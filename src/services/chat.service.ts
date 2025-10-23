@@ -7,25 +7,57 @@ import { db } from '@/config/firebase';
 import { executeStatement, getDatabase } from '@/database/database';
 import type { Chat, CreateChatData, CreateMessageData, Message } from '@/types/chat.types';
 import {
-    collection,
-    doc,
-    getDoc,
-    getDocs,
-    onSnapshot,
-    orderBy,
-    query,
-    serverTimestamp,
-    setDoc,
-    updateDoc,
-    where,
-    type Unsubscribe,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+  type Unsubscribe,
 } from 'firebase/firestore';
+import { syncMessageToSQLite } from './message.service';
 
 const CHATS_COLLECTION = 'chats';
 const MESSAGES_COLLECTION = 'messages';
 
 // MessageAI system user ID (consistent across all users)
 export const MESSAGE_AI_USER_ID = 'messageai-system';
+
+/**
+ * Get the last synced timestamp for a chat (for efficient message fetching)
+ */
+export async function getLastSyncedTimestamp(chatId: string): Promise<number> {
+  try {
+    const sqlite = getDatabase();
+    const result = await sqlite.getFirstAsync<{ lastSyncedAt: number | null }>(
+      'SELECT lastSyncedAt FROM chats WHERE id = ?',
+      [chatId]
+    );
+    return result?.lastSyncedAt || 0;
+  } catch (error) {
+    console.error('❌ Failed to get last synced timestamp:', error);
+    return 0;
+  }
+}
+
+/**
+ * Update the last synced timestamp for a chat
+ */
+export async function updateLastSyncedTimestamp(chatId: string, timestamp: number): Promise<void> {
+  try {
+    await executeStatement(
+      'UPDATE chats SET lastSyncedAt = ? WHERE id = ?',
+      [timestamp, chatId]
+    );
+  } catch (error) {
+    console.error('❌ Failed to update last synced timestamp:', error);
+  }
+}
 
 /**
  * Sync chat to SQLite for offline access
@@ -418,6 +450,57 @@ export function onUserChatsSnapshot(
         // Sync all chats to SQLite for offline access
         for (const chat of chats) {
           await syncChatToSQLite(chat);
+          
+          // Also fetch and sync the last message if it exists
+          // This ensures messages are cached as soon as they arrive (even if chat isn't opened)
+          if (chat.lastMessageId) {
+            try {
+              const sqlite = getDatabase();
+              
+              // Check if message is already in SQLite
+              const existingMessage = await sqlite.getFirstAsync<{ id: string }>(
+                'SELECT id FROM messages WHERE id = ?',
+                [chat.lastMessageId]
+              );
+              
+              // Only fetch from Firestore if not already cached
+              if (!existingMessage) {
+                const messageRef = doc(
+                  db, 
+                  CHATS_COLLECTION, 
+                  chat.id, 
+                  MESSAGES_COLLECTION, 
+                  chat.lastMessageId
+                );
+                const messageDoc = await getDoc(messageRef);
+                
+                if (messageDoc.exists()) {
+                  const data = messageDoc.data();
+                  const message: Message = {
+                    id: messageDoc.id,
+                    chatId: chat.id,
+                    senderId: data.senderId,
+                    text: data.text || '',
+                    mediaUrl: data.mediaUrl,
+                    mediaMime: data.mediaMime,
+                    replyToId: data.replyToId,
+                    status: data.status || 'sent',
+                    edited: data.edited || false,
+                    editedAt: data.editedAt?.toMillis?.() || data.editedAt,
+                    createdAt: data.createdAt?.toMillis?.() || data.createdAt || Date.now(),
+                  };
+                  
+                  // Sync to SQLite with media caching
+                  await syncMessageToSQLite(message);
+                  console.log(`📩 Auto-cached new message: ${chat.lastMessageId}`);
+                }
+              }
+            } catch (error) {
+              // Silent fail - not critical if we can't sync the last message
+              // Message will be synced when user opens the chat
+              console.log(`⚠️ Could not auto-cache last message for chat ${chat.id}`);
+            }
+          }
         }
         console.log(`💾 Synced ${chats.length} chats to SQLite`);
         
@@ -553,62 +636,129 @@ export async function getChatById(chatId: string): Promise<Chat | null> {
 }
 
 /**
- * Listen to messages in a chat in real-time
+ * Listen for NEW messages only (created after lastSyncedTimestamp)
  * @param chatId - Chat ID
- * @param callback - Function called with messages array when updated
+ * @param lastSyncedTimestamp - Only fetch messages newer than this
+ * @param callback - Function called with new messages
  * @returns Unsubscribe function
  */
-export function onChatMessagesSnapshot(
+export function onNewMessagesSnapshot(
   chatId: string,
-  callback: (messages: Message[]) => void
+  lastSyncedTimestamp: number,
+  callback: (message: Message) => void
 ): Unsubscribe {
   try {
     const messagesRef = collection(db, CHATS_COLLECTION, chatId, MESSAGES_COLLECTION);
-    const messagesQuery = query(messagesRef, orderBy('createdAt', 'asc'));
+    const messagesQuery = query(
+      messagesRef, 
+      where('createdAt', '>', lastSyncedTimestamp),
+      orderBy('createdAt', 'asc')
+    );
 
     const unsubscribe = onSnapshot(
       messagesQuery,
       (snapshot) => {
-        const messages: Message[] = snapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            chatId,
-            senderId: data.senderId,
-            text: data.text || '',
-            mediaUrl: data.mediaUrl,
-            mediaMime: data.mediaMime,
-            replyToId: data.replyToId,
-            status: data.status || 'sent',
-            edited: data.edited || false,
-            editedAt: data.editedAt?.toMillis?.() || data.editedAt,
-            createdAt: data.createdAt?.toMillis?.() || data.createdAt || Date.now(),
-          };
+        snapshot.docChanges().forEach(change => {
+          if (change.type === 'added') {
+            const doc = change.doc;
+            const data = doc.data();
+            const message: Message = {
+              id: doc.id,
+              chatId,
+              senderId: data.senderId,
+              text: data.text || '',
+              mediaUrl: data.mediaUrl,
+              mediaMime: data.mediaMime,
+              replyToId: data.replyToId,
+              status: data.status || 'sent',
+              edited: data.edited || false,
+              editedAt: data.editedAt?.toMillis?.() || data.editedAt,
+              createdAt: data.createdAt?.toMillis?.() || data.createdAt || Date.now(),
+            };
+            console.log(`📩 New message: ${message.id}`);
+            callback(message);
+          }
         });
-        console.log(`📱 Received ${messages.length} messages for chat ${chatId}`);
-        callback(messages);
       },
       (error: any) => {
-        // Handle offline errors gracefully - we already have SQLite data
         const errorCode = error?.code || '';
-        const errorMessage = error?.message || '';
-        
-        if (errorCode === 'permission-denied' || 
-            errorCode === 'unavailable' ||
-            errorMessage.includes('Missing or insufficient privileges') ||
-            errorMessage.includes('offline') ||
-            errorMessage.includes('network')) {
-          console.log('⚠️ Firestore listener offline (expected in airplane mode) - using cached data');
+        if (errorCode === 'unavailable' || errorCode === 'permission-denied') {
+          console.log('⚠️ New messages listener offline');
         } else {
-          console.error('❌ Error listening to messages:', error);
+          console.error('❌ Error in new messages listener:', error);
         }
-        // Don't callback with empty array - keep existing data
       }
     );
 
     return unsubscribe;
   } catch (error) {
-    console.error('❌ Error setting up messages listener:', error);
+    console.error('❌ Error setting up new messages listener:', error);
+    return () => {};
+  }
+}
+
+/**
+ * Listen for STATUS UPDATES on existing messages
+ * @param chatId - Chat ID
+ * @param callback - Function called when message status changes
+ * @returns Unsubscribe function
+ */
+export function onMessageStatusUpdatesSnapshot(
+  chatId: string,
+  callback: (message: Message) => void
+): Unsubscribe {
+  try {
+    const messagesRef = collection(db, CHATS_COLLECTION, chatId, MESSAGES_COLLECTION);
+    const messagesQuery = query(messagesRef, orderBy('createdAt', 'asc'));
+    
+    let isFirstSnapshot = true;
+
+    const unsubscribe = onSnapshot(
+      messagesQuery,
+      (snapshot) => {
+        // Skip initial snapshot (we already have messages from SQLite)
+        if (isFirstSnapshot) {
+          isFirstSnapshot = false;
+          console.log('📡 Status updates listener initialized');
+          return;
+        }
+        
+        // Only process 'modified' changes (status updates)
+        snapshot.docChanges().forEach(change => {
+          if (change.type === 'modified') {
+            const doc = change.doc;
+            const data = doc.data();
+            const message: Message = {
+              id: doc.id,
+              chatId,
+              senderId: data.senderId,
+              text: data.text || '',
+              mediaUrl: data.mediaUrl,
+              mediaMime: data.mediaMime,
+              replyToId: data.replyToId,
+              status: data.status || 'sent',
+              edited: data.edited || false,
+              editedAt: data.editedAt?.toMillis?.() || data.editedAt,
+              createdAt: data.createdAt?.toMillis?.() || data.createdAt || Date.now(),
+            };
+            console.log(`📝 Status update: ${message.id} → ${message.status}`);
+            callback(message);
+          }
+        });
+      },
+      (error: any) => {
+        const errorCode = error?.code || '';
+        if (errorCode === 'unavailable' || errorCode === 'permission-denied') {
+          console.log('⚠️ Status updates listener offline');
+        } else {
+          console.error('❌ Error in status updates listener:', error);
+        }
+      }
+    );
+
+    return unsubscribe;
+  } catch (error) {
+    console.error('❌ Error setting up status updates listener:', error);
     return () => {};
   }
 }

@@ -5,25 +5,25 @@
 
 import { db } from '@/config/firebase';
 import type {
-    CreateUserData,
-    PublicUserProfile,
-    UpdateUserData,
-    User,
-    UserPresence,
+  CreateUserData,
+  PublicUserProfile,
+  UpdateUserData,
+  User,
+  UserPresence,
 } from '@/types/user.types';
 import {
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    limit,
-    onSnapshot,
-    query,
-    serverTimestamp,
-    setDoc,
-    updateDoc,
-    type Unsubscribe
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  type Unsubscribe
 } from 'firebase/firestore';
 
 const USERS_COLLECTION = 'users';
@@ -481,15 +481,15 @@ export function onUsersProfilesSnapshot(
     const unsubscribe = onUserSnapshot(userId, (user) => {
       if (user) {
         usersMap[userId] = user;
-        console.log('✅ Profile updated for user:', userId);
-        console.log('   - displayName:', user.displayName);
-        console.log('   - avatarUrl:', user.avatarUrl || '(none)');
-        console.log('   - All fields:', JSON.stringify({
-          id: user.id,
-          username: user.username,
-          displayName: user.displayName,
-          avatarUrl: user.avatarUrl,
-        }));
+        // console.log('✅ Profile updated for user:', userId);
+        // console.log('   - displayName:', user.displayName);
+        // console.log('   - avatarUrl:', user.avatarUrl || '(none)');
+        // console.log('   - All fields:', JSON.stringify({
+          // id: user.id,
+          // username: user.username,
+          // displayName: user.displayName,
+          // avatarUrl: user.avatarUrl,
+        // }));
       } else {
         console.log('⚠️ User not found:', userId);
         delete usersMap[userId];
@@ -572,9 +572,6 @@ export async function deleteUser(userId: string): Promise<void> {
  * Handles Firestore Timestamp conversion
  */
 function firestoreUserToUser(userId: string, data: any): User {
-  console.log('📄 Raw Firestore data for user:', userId);
-  console.log('   - avatarUrl field:', data.avatarUrl);
-  console.log('   - all fields:', Object.keys(data));
   
   const user = {
     id: userId,
@@ -591,7 +588,6 @@ function firestoreUserToUser(userId: string, data: any): User {
     updatedAt: firestoreTimestampToMillis(data.updatedAt),
   };
   
-  console.log('✅ Converted user object - avatarUrl:', user.avatarUrl || '(none)');
   return user;
 }
 
