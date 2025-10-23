@@ -193,7 +193,7 @@ export default function ChatsScreen() {
         subtitle: chat.lastMessageText || 'No messages yet',
         presence: 'offline' as UserPresence,
         avatarUrl: undefined,
-        avatarBlob: undefined,
+        avatarLocalPath: undefined,
       };
     }
 
@@ -207,7 +207,7 @@ export default function ChatsScreen() {
       subtitle: chat.lastMessageText || 'No messages yet',
       presence,
       avatarUrl: otherParticipant?.avatarUrl,
-      avatarBlob: otherParticipant?.avatarBlob,
+      avatarLocalPath: otherParticipant?.avatarLocalPath,
     };
   };
 
@@ -244,7 +244,7 @@ export default function ChatsScreen() {
   };
 
   const renderChatItem = ({ item }: { item: Chat }) => {
-    const { title, subtitle, presence, avatarUrl, avatarBlob } = getChatDisplayInfo(item);
+    const { title, subtitle, presence, avatarUrl, avatarLocalPath } = getChatDisplayInfo(item);
 
     return (
       <TouchableOpacity
@@ -256,9 +256,9 @@ export default function ChatsScreen() {
         {/* Avatar with presence indicator */}
         <View style={styles.avatarContainer}>
           <View style={styles.avatar}>
-            {avatarBlob ? (
+            {avatarLocalPath ? (
               <Image 
-                source={{ uri: `data:image/jpeg;base64,${avatarBlob}` }} 
+                source={{ uri: avatarLocalPath }} 
                 style={styles.avatarImage} 
               />
             ) : avatarUrl ? (

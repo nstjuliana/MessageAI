@@ -57,7 +57,7 @@ export interface PublicUserProfile {
   username: string;
   displayName: string;
   avatarUrl?: string;
-  avatarBlob?: string; // Base64 encoded avatar image for offline use
+  avatarLocalPath?: string; // Local file path to cached avatar image
   bio?: string;
   presence: UserPresence;
   lastSeen: number;

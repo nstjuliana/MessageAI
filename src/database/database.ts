@@ -6,7 +6,7 @@
 import type { SQLiteBindParams } from 'expo-sqlite';
 import * as SQLite from 'expo-sqlite';
 
-import { ALL_TABLES, DATABASE_NAME, DATABASE_VERSION } from './schema';
+import { ALL_TABLES, CREATE_PROFILES_INDEXES, DATABASE_NAME, DATABASE_VERSION } from './schema';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
@@ -298,6 +298,70 @@ async function migrateDatabase(fromVersion: number, toVersion: number): Promise<
         } else {
           console.error('⚠️ Could not add avatarBlob column:', error.message);
         }
+      }
+    }
+
+    // Version 7 migrations - Replace avatarBlob with avatarLocalPath (file system storage)
+    if (fromVersion < 7 && toVersion >= 7) {
+      console.log('Migrating to version 7: Switching to file system storage for avatars');
+      try {
+        // Check if profiles table exists and has data
+        const result = await db.getFirstAsync<{ count: number }>(
+          `SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name='profiles'`
+        );
+        
+        if (result && result.count > 0) {
+          // Table exists, recreate it without avatarBlob column
+          console.log('🔄 Recreating profiles table to remove avatarBlob column...');
+          
+          // Step 1: Create new table with correct schema (without avatarBlob)
+          await db.execAsync(`
+            CREATE TABLE profiles_new (
+              userId TEXT PRIMARY KEY,
+              username TEXT NOT NULL,
+              displayName TEXT NOT NULL,
+              avatarUrl TEXT,
+              avatarLocalPath TEXT,
+              bio TEXT,
+              lastSeen INTEGER,
+              cachedAt INTEGER NOT NULL,
+              updatedAt INTEGER NOT NULL
+            )
+          `);
+          console.log('✅ Created new profiles table without avatarBlob column');
+          
+          // Step 2: Copy data from old table to new table (excluding avatarBlob)
+          await db.execAsync(`
+            INSERT INTO profiles_new (userId, username, displayName, avatarUrl, avatarLocalPath, bio, lastSeen, cachedAt, updatedAt)
+            SELECT userId, username, displayName, avatarUrl, NULL, bio, lastSeen, cachedAt, updatedAt
+            FROM profiles
+          `);
+          console.log('✅ Copied profile data (excluding avatarBlob)');
+          
+          // Step 3: Drop old table
+          await db.execAsync('DROP TABLE profiles');
+          console.log('✅ Dropped old profiles table');
+          
+          // Step 4: Rename new table to original name
+          await db.execAsync('ALTER TABLE profiles_new RENAME TO profiles');
+          console.log('✅ Renamed new table to profiles');
+          
+          // Step 5: Recreate indexes
+          await db.execAsync(CREATE_PROFILES_INDEXES);
+          console.log('✅ Recreated profiles indexes');
+        } else {
+          // Table doesn't exist, will be created with correct schema by ALL_TABLES
+          console.log('ℹ️ Profiles table does not exist yet, will be created with new schema');
+        }
+        
+        // Clear existing profiles so they're re-cached with file system storage
+        console.log('🗑️ Clearing profiles (will re-download with local file storage)...');
+        await db.execAsync('DELETE FROM profiles WHERE 1=1');
+        console.log('✅ Profiles cleared - will re-cache with file system storage on next use');
+        
+      } catch (error: any) {
+        console.error('⚠️ Migration error:', error.message);
+        // Don't throw - allow app to continue with whatever table structure exists
       }
     }
     

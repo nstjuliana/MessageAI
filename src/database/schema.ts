@@ -94,7 +94,7 @@ export const CREATE_PROFILES_TABLE = `
     username TEXT NOT NULL,
     displayName TEXT NOT NULL,
     avatarUrl TEXT,
-    avatarBlob TEXT,
+    avatarLocalPath TEXT,
     bio TEXT,
     lastSeen INTEGER,
     cachedAt INTEGER NOT NULL,
@@ -219,7 +219,7 @@ export const ALL_TABLES = [
  * Database version
  * Increment this when schema changes to trigger migrations
  */
-export const DATABASE_VERSION = 6;
+export const DATABASE_VERSION = 7;
 
 /**
  * Database name

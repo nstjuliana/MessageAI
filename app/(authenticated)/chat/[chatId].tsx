@@ -57,9 +57,9 @@ const MessageItem = React.memo(({
       {/* Avatar for received messages in groups */}
       {!isSent && isGroupChat && (
         <View style={styles.avatar}>
-          {sender?.avatarBlob ? (
+          {sender?.avatarLocalPath ? (
             <Image 
-              source={{ uri: `data:image/jpeg;base64,${sender.avatarBlob}` }} 
+              source={{ uri: sender.avatarLocalPath }} 
               style={styles.avatarImage} 
             />
           ) : sender?.avatarUrl ? (
@@ -124,7 +124,7 @@ const MessageItem = React.memo(({
     prevProps.currentStatus === nextProps.currentStatus &&
     prevProps.isSent === nextProps.isSent &&
     prevProps.sender?.id === nextProps.sender?.id &&
-    prevProps.sender?.avatarBlob === nextProps.sender?.avatarBlob &&
+    prevProps.sender?.avatarLocalPath === nextProps.sender?.avatarLocalPath &&
     prevProps.sender?.displayName === nextProps.sender?.displayName &&
     prevProps.isGroupChat === nextProps.isGroupChat
   );
@@ -355,7 +355,7 @@ export default function ChatScreen() {
           const cachedProfile = getCachedProfile(id);
           if (cachedProfile) {
             publicProfilesMap[id] = cachedProfile;
-            console.log(`✅ Updated participant with blob: ${cachedProfile.displayName}, hasBlob=${!!cachedProfile.avatarBlob}`);
+            console.log(`✅ Updated participant: ${cachedProfile.displayName}, hasLocalFile=${!!cachedProfile.avatarLocalPath}`);
           } else {
             // Fallback if cache read failed
             publicProfilesMap[id] = publicProfile;
@@ -616,10 +616,10 @@ export default function ChatScreen() {
                   {(() => {
                     const participant = getOtherParticipant();
                     
-                    if (participant?.avatarBlob) {
+                    if (participant?.avatarLocalPath) {
                       return (
                         <Image 
-                          source={{ uri: `data:image/jpeg;base64,${participant.avatarBlob}` }} 
+                          source={{ uri: participant.avatarLocalPath }} 
                           style={styles.headerAvatarImage} 
                         />
                       );
