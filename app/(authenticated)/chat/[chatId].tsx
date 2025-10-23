@@ -23,6 +23,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useActivity } from '@/contexts/ActivityContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/contexts/NotificationContext';
+import { useProfileCache } from '@/contexts/ProfileCacheContext';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 import { getChatById, onChatMessagesSnapshot } from '@/services/chat.service';
 import {
@@ -42,6 +43,7 @@ export default function ChatScreen() {
   const { user } = useAuth();
   const { resetActivityTimer } = useActivity();
   const { setActiveChatId } = useNotifications();
+  const { getProfiles } = useProfileCache();
   const { onTypingStart, clearTyping } = useTypingIndicator(chatId || null, user?.uid || null);
   
   const [chat, setChat] = useState<Chat | null>(null);
@@ -61,6 +63,9 @@ export default function ChatScreen() {
   
   // Track which messages we've already processed to avoid re-syncing
   const processedMessagesRef = useRef<Map<string, string>>(new Map()); // messageId -> status hash
+  
+  // Track if this is the first load to prevent animated scroll on open
+  const isFirstLoadRef = useRef(true);
 
   // Register this chat as active (suppress notifications for this chat)
   useEffect(() => {
@@ -82,6 +87,9 @@ export default function ChatScreen() {
       return;
     }
 
+    // Reset first load flag when chat changes
+    isFirstLoadRef.current = true;
+
     let unsubscribeMessages: (() => void) | undefined;
     let messagesFromSQLite: Message[] = [];
     let messagesFromFirestore: Message[] = [];
@@ -94,6 +102,13 @@ export default function ChatScreen() {
         messagesFromSQLite = await getMessagesFromSQLite(chatId);
         setMessages(messagesFromSQLite);
         setLoading(false); // Stop showing spinner immediately
+        
+        // Scroll to bottom immediately after setting messages (on next frame)
+        setTimeout(() => {
+          if (flatListRef.current && messagesFromSQLite.length > 0) {
+            flatListRef.current.scrollToEnd({ animated: false });
+          }
+        }, 0);
 
         // 2. Load chat metadata and participants in parallel (background)
         const [chatData] = await Promise.all([
@@ -162,6 +177,11 @@ export default function ChatScreen() {
           );
           
           setMessages(mergedMessages);
+          
+          // Mark first load complete after Firestore sync
+          if (isFirstLoadRef.current) {
+            isFirstLoadRef.current = false;
+          }
         });
       } catch (error) {
         console.error('Error loading chat:', error);
@@ -179,19 +199,26 @@ export default function ChatScreen() {
     };
   }, [chatId, user]);
 
-  // Subscribe to participant profiles in real-time (including avatars)
+  // Load participant profiles (with caching for instant display)
   useEffect(() => {
     if (!chatId || !user || !chat) return;
 
     const participantIds = chat.participantIds.filter(id => id !== user.uid);
     if (participantIds.length === 0) return;
 
-    console.log(`📡 Setting up real-time profile listeners for ${participantIds.length} participant(s)`);
+    console.log(`👥 Loading profiles for ${participantIds.length} participant(s)`);
 
+    // Load profiles from cache (instant display if available)
+    getProfiles(participantIds).then((profilesMap) => {
+      console.log(`📦 Loaded ${Object.keys(profilesMap).length} profiles from cache`);
+      setParticipants(profilesMap);
+    });
+
+    // Also set up real-time listener for updates (avatar changes, name changes, etc.)
     const unsubscribe = onUsersProfilesSnapshot(participantIds, (profilesMap) => {
-      console.log('🔄 Participant profiles updated:', Object.keys(profilesMap).length);
+      console.log('🔄 Participant profiles updated from Firestore');
       
-      // Convert to PublicUserProfile format
+      // Convert to PublicUserProfile format and update state
       const publicProfilesMap: Record<string, PublicUserProfile> = {};
       Object.entries(profilesMap).forEach(([id, profile]) => {
         publicProfilesMap[id] = {
@@ -212,7 +239,7 @@ export default function ChatScreen() {
       console.log('👋 Cleaning up profile listeners');
       unsubscribe();
     };
-  }, [chatId, user, chat]);
+  }, [chatId, user, chat, getProfiles]);
 
   // Subscribe to presence data for all participants (from RTDB)
   // Same pattern as chats.tsx - store presence separately to avoid infinite loops
@@ -541,9 +568,19 @@ export default function ChatScreen() {
         bounces={true}
         // Dismiss keyboard interactively when dragging through it
         keyboardDismissMode="interactive"
-        // Auto-scroll to bottom when new messages arrive (normal order)
+        // Render more items initially to ensure full list is laid out
+        initialNumToRender={50}
+        maxToRenderPerBatch={20}
+        // Scroll to end when layout completes (for initial load)
+        onLayout={() => {
+          if (isFirstLoadRef.current && messages.length > 0 && flatListRef.current) {
+            flatListRef.current.scrollToEnd({ animated: false });
+          }
+        }}
+        // Auto-scroll to bottom when new messages arrive (after initial load)
         onContentSizeChange={() => {
-          if (messages.length > 0 && flatListRef.current) {
+          if (messages.length > 0 && flatListRef.current && !isFirstLoadRef.current) {
+            // Only animate scroll for new messages, not initial load
             flatListRef.current.scrollToEnd({ animated: true });
           }
         }}

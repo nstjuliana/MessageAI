@@ -5,16 +5,23 @@
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/contexts/NotificationContext';
+import { useProfileCache } from '@/contexts/ProfileCacheContext';
 import { onUserChatsSnapshot } from '@/services/chat.service';
-import { getPublicProfile } from '@/services/user.service';
 import type { Chat } from '@/types/chat.types';
 import { useEffect, useRef } from 'react';
 
 export function useInAppNotifications() {
   const { user } = useAuth();
   const { showNotification, activeChatId } = useNotifications();
+  const { getProfile } = useProfileCache();
   const lastMessageTimestampsRef = useRef<Record<string, number>>({});
   const isInitialLoadRef = useRef(true);
+  
+  // Use ref to track activeChatId without triggering listener restart
+  const activeChatIdRef = useRef<string | null>(activeChatId);
+  useEffect(() => {
+    activeChatIdRef.current = activeChatId;
+  }, [activeChatId]);
 
   useEffect(() => {
     if (!user) {
@@ -74,16 +81,16 @@ export function useInAppNotifications() {
             continue;
           }
 
-          // Skip if user is viewing this chat
-          if (activeChatId === chatId) {
+          // Skip if user is viewing this chat (use ref to avoid dependency)
+          if (activeChatIdRef.current === chatId) {
             console.log('📵 Notification suppressed: user is viewing this chat');
             continue;
           }
 
           try {
-            // Fetch sender profile
+            // Fetch sender profile (with caching)
             console.log('👤 Fetching sender profile:', senderId);
-            const senderProfile = await getPublicProfile(senderId);
+            const senderProfile = await getProfile(senderId);
 
             if (!senderProfile) {
               console.error('❌ Failed to fetch sender profile for:', senderId);
@@ -118,6 +125,6 @@ export function useInAppNotifications() {
       console.log('👋 Cleaning up in-app notification listener');
       unsubscribe();
     };
-  }, [user, showNotification, activeChatId]);
+  }, [user, showNotification, getProfile]); // activeChatId NOT in deps - using ref instead
 }
 

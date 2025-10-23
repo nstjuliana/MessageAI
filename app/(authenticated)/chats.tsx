@@ -18,6 +18,7 @@ import {
 
 import { useActivity } from '@/contexts/ActivityContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProfileCache } from '@/contexts/ProfileCacheContext';
 import { useUser } from '@/contexts/UserContext';
 import { onUserChatsSnapshot } from '@/services/chat.service';
 import { onUserPresenceChange, onUsersPresenceChange } from '@/services/presence.service';
@@ -29,6 +30,7 @@ export default function ChatsScreen() {
   const { user, logOut } = useAuth();
   const { userProfile } = useUser();
   const { resetActivityTimer } = useActivity();
+  const { getProfiles } = useProfileCache();
   const [chats, setChats] = useState<Chat[]>([]);
   const [chatParticipants, setChatParticipants] = useState<Record<string, User>>({});
   const [presenceData, setPresenceData] = useState<Record<string, { status: UserPresence; lastSeen: number }>>({});
@@ -58,7 +60,7 @@ export default function ChatsScreen() {
     };
   }, [user]);
 
-  // Subscribe to participant profiles in real-time (including avatars)
+  // Load participant profiles (with caching for instant display)
   useEffect(() => {
     if (!user || chats.length === 0) return;
 
@@ -74,13 +76,37 @@ export default function ChatsScreen() {
 
     if (allParticipantIds.size === 0) return;
 
-    console.log(`📡 Setting up real-time profile listeners for ${allParticipantIds.size} participants`);
+    const participantIdsArray = Array.from(allParticipantIds);
+    console.log(`👥 Loading profiles for ${participantIdsArray.length} participants`);
 
-    // Set up real-time listeners for all participants
+    // Load profiles from cache first (instant display if available)
+    getProfiles(participantIdsArray).then((profilesMap) => {
+      console.log(`📦 Loaded ${Object.keys(profilesMap).length} profiles from cache`);
+      
+      // Convert PublicUserProfile to User format
+      const userMap: Record<string, User> = {};
+      Object.entries(profilesMap).forEach(([id, profile]) => {
+        userMap[id] = {
+          id: profile.id,
+          username: profile.username,
+          displayName: profile.displayName,
+          avatarUrl: profile.avatarUrl,
+          bio: profile.bio,
+          presence: 'offline', // Will be updated by RTDB
+          lastSeen: profile.lastSeen,
+          deviceTokens: [],
+          createdAt: 0,
+          updatedAt: 0,
+        };
+      });
+      setChatParticipants(userMap);
+    });
+
+    // Also set up real-time listener for updates (avatar changes, name changes, etc.)
     const unsubscribe = onUsersProfilesSnapshot(
-      Array.from(allParticipantIds),
+      participantIdsArray,
       (participantsMap) => {
-        console.log('🔄 Participant profiles updated:', Object.keys(participantsMap).length);
+        console.log('🔄 Participant profiles updated from Firestore');
         setChatParticipants(participantsMap);
       }
     );
@@ -89,7 +115,7 @@ export default function ChatsScreen() {
       console.log('👋 Cleaning up profile listeners');
       unsubscribe();
     };
-  }, [user, chats]);
+  }, [user, chats, getProfiles]);
 
   // Subscribe to presence data for all participants (from RTDB)
   useEffect(() => {

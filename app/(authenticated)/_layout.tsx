@@ -11,6 +11,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { ActivityProvider } from '@/contexts/ActivityContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { NotificationProvider, useNotifications } from '@/contexts/NotificationContext';
+import { ProfileCacheProvider } from '@/contexts/ProfileCacheContext';
 import { useInAppNotifications } from '@/hooks/useInAppNotifications';
 import { useNetworkRetry } from '@/hooks/useNetworkRetry';
 import { usePresenceTrackingRTDB } from '@/hooks/usePresenceTrackingRTDB';
@@ -112,11 +113,13 @@ export default function AuthenticatedLayout() {
     return <Redirect href="/auth/login" />;
   }
 
-  // User is authenticated, wrap with NotificationProvider
+  // User is authenticated, wrap with providers
   return (
-    <NotificationProvider>
-      <AuthenticatedContent />
-    </NotificationProvider>
+    <ProfileCacheProvider>
+      <NotificationProvider>
+        <AuthenticatedContent />
+      </NotificationProvider>
+    </ProfileCacheProvider>
   );
 }
 
