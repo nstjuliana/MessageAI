@@ -365,6 +365,45 @@ async function migrateDatabase(fromVersion: number, toVersion: number): Promise<
       }
     }
     
+    // Version 8 migrations - Add localMediaPath to messages and sync tracking to chats
+    if (fromVersion < 8 && toVersion >= 8) {
+      console.log('Migrating to version 8: Adding media caching and sync tracking');
+      
+      // Add localMediaPath to messages table
+      try {
+        await db.execAsync('ALTER TABLE messages ADD COLUMN localMediaPath TEXT');
+        console.log('✅ Added localMediaPath column to messages table');
+      } catch (error: any) {
+        if (error.message?.includes('duplicate column name')) {
+          console.log('✅ localMediaPath column already exists');
+        } else {
+          console.error('⚠️ Could not add localMediaPath column:', error.message);
+        }
+      }
+      
+      // Add sync tracking columns to chats table
+      const chatColumns = [
+        { name: 'syncStatus', definition: 'TEXT DEFAULT "pending"' },
+        { name: 'lastSyncedAt', definition: 'INTEGER' },
+        { name: 'messageCount', definition: 'INTEGER DEFAULT 0' },
+      ];
+      
+      for (const column of chatColumns) {
+        try {
+          await db.execAsync(`ALTER TABLE chats ADD COLUMN ${column.name} ${column.definition}`);
+          console.log(`✅ Added ${column.name} column to chats table`);
+        } catch (error: any) {
+          if (error.message?.includes('duplicate column name')) {
+            console.log(`✅ ${column.name} column already exists`);
+          } else {
+            console.error(`⚠️ Could not add ${column.name} column:`, error.message);
+          }
+        }
+      }
+      
+      console.log('✅ Version 8 migration completed');
+    }
+    
     console.log('Migration completed successfully');
   } catch (error) {
     console.error('Migration failed:', error);

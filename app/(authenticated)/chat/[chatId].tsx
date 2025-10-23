@@ -25,7 +25,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { useProfileCache } from '@/contexts/ProfileCacheContext';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
-import { getChatById, getChatFromSQLite, onChatMessagesSnapshot } from '@/services/chat.service';
+import { getChatFromSQLite, onChatMessagesSnapshot } from '@/services/chat.service';
 import {
   getMessagesFromSQLite,
   markMessageAsDelivered,
@@ -221,28 +221,22 @@ export default function ChatScreen() {
         
         console.log(`💾 Loaded ${recentMessages.length} messages from SQLite (${messagesFromSQLite.length} total available)`);
         
-        // Scroll to bottom immediately after setting messages (on next frame)
-        setTimeout(() => {
-          if (flatListRef.current && recentMessages.length > 0) {
-            flatListRef.current.scrollToEnd({ animated: false });
-          }
-        }, 0);
+        // Pre-populate processedMessagesRef with existing SQLite messages
+        // This prevents re-syncing messages we already have
+        messagesFromSQLite.forEach(msg => {
+          const messageHash = `${msg.id}-${msg.status}`;
+          processedMessagesRef.current.set(msg.id, messageHash);
+        });
+        console.log(`✅ Marked ${messagesFromSQLite.length} existing messages as processed`);
 
-        // 3. Only sync from Firestore if we don't have local data (edge case)
+        // 3. If no chat data in SQLite, we'll just show empty state
+        // The background sync will populate it eventually
         if (!chatDataFromSQLite) {
-          console.log('⚠️ No local chat data, fetching from Firestore...');
-          const chatData = await getChatById(chatId);
-          if (chatData) {
-            setChat(chatData);
-            console.log('🌐 Chat synced from Firestore (fallback)');
-          } else {
-            console.error('Chat not found in SQLite or Firestore');
-            return;
-          }
+          console.log('⚠️ No local chat data - will be synced by background sync');
         }
 
         // 4. Set up Firestore listener for real-time updates (background, non-blocking)
-        // This will sync new messages but won't affect initial load
+        // This ONLY listens for new messages, doesn't fetch existing ones
         console.log('🔄 Setting up Firestore listener for real-time updates...');
         unsubscribeMessages = onChatMessagesSnapshot(chatId, async (firestoreMessages) => {
           messagesFromFirestore = firestoreMessages;
@@ -446,13 +440,6 @@ export default function ChatScreen() {
       
       // Add message to UI immediately (optimistic)
       setMessages(prev => [...prev, message]);
-      
-      // Scroll to bottom
-      setTimeout(() => {
-        if (flatListRef.current) {
-          flatListRef.current.scrollToEnd({ animated: true });
-        }
-      }, 100);
     } catch (error) {
       console.error('Error sending message:', error);
       // Restore message text if send failed
@@ -567,7 +554,7 @@ export default function ChatScreen() {
   };
 
   const renderEmptyState = () => (
-    <View style={styles.emptyState}>
+    <View style={[styles.emptyState, { transform: [{ scaleY: -1 }] }]}>
       <Text style={styles.emptyEmoji}>💬</Text>
       <Text style={styles.emptyTitle}>No messages yet</Text>
       <Text style={styles.emptyText}>Send a message to start the conversation</Text>
@@ -677,14 +664,13 @@ export default function ChatScreen() {
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={-30}
-          enabled
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         >
           {/* Message List Container - Takes full available space */}
           <View style={styles.messageListContainer}>
         <FlatList
         ref={flatListRef}
-        data={messages}
+        data={[...messages].reverse()}
         renderItem={renderMessage}
         keyExtractor={(item) => item.id}
         contentContainerStyle={[
@@ -699,6 +685,8 @@ export default function ChatScreen() {
             tintColor="#007AFF"
           />
         }
+        // Inverted makes newest messages appear at bottom naturally
+        inverted
         // Track scrolling activity for presence
         onScroll={resetActivityTimer}
         scrollEventThrottle={1000}
@@ -713,19 +701,6 @@ export default function ChatScreen() {
         windowSize={21}
         removeClippedSubviews={Platform.OS === 'android'}
         updateCellsBatchingPeriod={50}
-        // Scroll to end when layout completes (for initial load)
-        onLayout={() => {
-          if (isFirstLoadRef.current && messages.length > 0 && flatListRef.current) {
-            flatListRef.current.scrollToEnd({ animated: false });
-          }
-        }}
-        // Auto-scroll to bottom when new messages arrive (after initial load)
-        onContentSizeChange={() => {
-          if (messages.length > 0 && flatListRef.current && !isFirstLoadRef.current) {
-            // Only animate scroll for new messages, not initial load
-            flatListRef.current.scrollToEnd({ animated: true });
-          }
-        }}
         />
       </View>
 
@@ -954,7 +929,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
   },
   receivedBubble: {
-    backgroundColor: '#fff',
+    backgroundColor: '#f5f5f5',
     alignSelf: 'flex-start',
     borderBottomLeftRadius: 4,
   },

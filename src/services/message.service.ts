@@ -7,6 +7,7 @@
  * - Offline queue: messages are queued when offline
  * - Retry mechanism: failed messages can be retried
  * - SQLite + Firestore sync
+ * - Media caching: automatically cache attachments
  */
 
 import { db } from '@/config/firebase';
@@ -19,6 +20,8 @@ import {
   setDoc,
   updateDoc
 } from 'firebase/firestore';
+
+import { cacheMedia, getCachedMediaPath } from './media-cache.service';
 
 const CHATS_COLLECTION = 'chats';
 const MESSAGES_COLLECTION = 'messages';
@@ -380,8 +383,8 @@ export async function getMessagesFromSQLite(
     
     const sql = `
       SELECT 
-        id, chatId, senderId, text, mediaUrl, mediaMime, replyToId,
-        status, createdAt, edited, editedAt
+        id, chatId, senderId, text, mediaUrl, mediaMime, localMediaPath,
+        replyToId, status, createdAt, edited, editedAt
       FROM messages
       WHERE chatId = ?
       ORDER BY createdAt DESC
@@ -398,6 +401,7 @@ export async function getMessagesFromSQLite(
       text: row.text || undefined,
       mediaUrl: row.mediaUrl || undefined,
       mediaMime: row.mediaMime || undefined,
+      localMediaPath: row.localMediaPath || undefined,
       replyToId: row.replyToId || undefined,
       status: row.status as MessageStatus,
       edited: row.edited === 1,
@@ -416,23 +420,53 @@ export async function getMessagesFromSQLite(
 /**
  * Sync a received message from Firestore to SQLite
  * Used when receiving messages via real-time listener
+ * Also caches media attachments if present
  */
 export async function syncMessageToSQLite(message: Message): Promise<void> {
   try {
     const sqlite = getDatabase();
     
     // Check if message already exists
-    const existingSql = 'SELECT id, status FROM messages WHERE id = ?';
-    const existing = await sqlite.getFirstAsync<{ id: string; status: string }>(
+    const existingSql = 'SELECT id, status, localMediaPath FROM messages WHERE id = ?';
+    const existing = await sqlite.getFirstAsync<{ id: string; status: string; localMediaPath: string | null }>(
       existingSql,
       [message.id]
     );
+    
+    // If message has media, try to get or cache it
+    let localMediaPath: string | null = null;
+    if (message.mediaUrl) {
+      // Check if already cached
+      if (existing?.localMediaPath) {
+        localMediaPath = existing.localMediaPath;
+      } else {
+        // Try to get from cache
+        localMediaPath = await getCachedMediaPath(message.mediaUrl, message.mediaMime);
+        
+        // If not cached, cache it in background
+        if (!localMediaPath) {
+          cacheMedia(message.mediaUrl, message.mediaMime).then((path) => {
+            if (path) {
+              // Update message with local path after caching completes
+              executeStatement(
+                'UPDATE messages SET localMediaPath = ? WHERE id = ?',
+                [path, message.id]
+              ).catch((error) => {
+                console.error('❌ Failed to update localMediaPath:', error);
+              });
+            }
+          }).catch((error) => {
+            console.error('❌ Failed to cache media in background:', error);
+          });
+        }
+      }
+    }
     
     if (existing) {
       // Update existing message (only if status changed or other fields differ)
       const updateSql = `
         UPDATE messages 
-        SET text = ?, mediaUrl = ?, mediaMime = ?, status = ?,
+        SET text = ?, mediaUrl = ?, mediaMime = ?, localMediaPath = ?, status = ?,
             edited = ?, editedAt = ?, syncedToFirestore = 1
         WHERE id = ?
       `;
@@ -441,6 +475,7 @@ export async function syncMessageToSQLite(message: Message): Promise<void> {
         message.text || null,
         message.mediaUrl || null,
         message.mediaMime || null,
+        localMediaPath,
         message.status,
         message.edited ? 1 : 0,
         message.editedAt || null,
@@ -455,9 +490,9 @@ export async function syncMessageToSQLite(message: Message): Promise<void> {
       // Insert new message
       const insertSql = `
         INSERT INTO messages (
-          id, chatId, senderId, text, mediaUrl, mediaMime, replyToId,
+          id, chatId, senderId, text, mediaUrl, mediaMime, localMediaPath, replyToId,
           status, createdAt, edited, editedAt, syncedToFirestore
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
       `;
       
       await executeStatement(insertSql, [
@@ -467,6 +502,7 @@ export async function syncMessageToSQLite(message: Message): Promise<void> {
         message.text || null,
         message.mediaUrl || null,
         message.mediaMime || null,
+        localMediaPath,
         message.replyToId || null,
         message.status,
         message.createdAt,

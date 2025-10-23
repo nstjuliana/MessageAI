@@ -16,27 +16,43 @@ export default function RootLayout() {
 
   // Initialize database on app start
   useEffect(() => {
-    // FORCE DATABASE REBUILD - Remove this after migration completes!
-    console.log('🔄 Forcing database rebuild to apply schema changes...');
-    rebuildDatabase()
-      .then(() => {
-        console.log('✅ Database rebuilt successfully');
-        setDbInitialized(true);
-      })
-      .catch((error) => {
-        console.error('❌ Failed to rebuild database:', error);
-        // Try regular init as fallback
-        initDatabase()
-          .then(() => {
-            console.log('Database initialized (fallback)');
-            setDbInitialized(true);
-          })
-          .catch((initError) => {
-            console.error('Failed to initialize database:', initError);
-            // Still allow app to run without local database
-            setDbInitialized(true);
-          });
-      });
+    // TEMPORARY: Force database rebuild for v8 migration
+    // Remove this after everyone has migrated!
+    const forceRebuild = true; // Set to false after migration
+    
+    if (forceRebuild) {
+      console.log('🔄 Forcing database rebuild for v8 migration...');
+      rebuildDatabase()
+        .then(() => {
+          console.log('✅ Database rebuilt successfully');
+          setDbInitialized(true);
+        })
+        .catch((error) => {
+          console.error('❌ Failed to rebuild database:', error);
+          // Try regular init as fallback
+          initDatabase()
+            .then(() => {
+              console.log('✅ Database initialized (fallback)');
+              setDbInitialized(true);
+            })
+            .catch((initError) => {
+              console.error('❌ Failed to initialize database:', initError);
+              setDbInitialized(true);
+            });
+        });
+    } else {
+      console.log('🔄 Initializing database...');
+      initDatabase()
+        .then(() => {
+          console.log('✅ Database initialized successfully');
+          setDbInitialized(true);
+        })
+        .catch((error) => {
+          console.error('❌ Failed to initialize database:', error);
+          // Still allow app to run without local database
+          setDbInitialized(true);
+        });
+    }
   }, []);
 
   // Show loading while database initializes

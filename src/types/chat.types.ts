@@ -34,6 +34,7 @@ export interface Message {
   text?: string;
   mediaUrl?: string;
   mediaMime?: string; // MIME type of media (image/jpeg, video/mp4, etc.)
+  localMediaPath?: string; // Local path to cached media file
   replyToId?: string; // ID of message being replied to
   status: MessageStatus;
   reactions?: { [emoji: string]: string[] }; // emoji -> array of user IDs

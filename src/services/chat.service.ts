@@ -29,17 +29,24 @@ export const MESSAGE_AI_USER_ID = 'messageai-system';
 
 /**
  * Sync chat to SQLite for offline access
+ * Preserves existing sync status if already set
  */
 async function syncChatToSQLite(chat: Chat): Promise<void> {
   try {
     const sqlite = getDatabase();
     
+    // Check if chat exists to preserve sync status
+    const existingChat = await sqlite.getFirstAsync<{ syncStatus: string }>(
+      'SELECT syncStatus FROM chats WHERE id = ?',
+      [chat.id]
+    );
+    
     const sql = `
       INSERT OR REPLACE INTO chats (
         id, type, lastMessageId, lastMessageText, lastMessageSenderId,
         lastMessageAt, createdAt, updatedAt, participantIds, adminIds,
-        groupName, groupAvatarUrl
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        groupName, groupAvatarUrl, syncStatus
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     
     await executeStatement(sql, [
@@ -55,6 +62,7 @@ async function syncChatToSQLite(chat: Chat): Promise<void> {
       JSON.stringify(chat.adminIds || []),
       chat.groupName || null,
       chat.groupAvatarUrl || null,
+      existingChat?.syncStatus || 'pending', // Preserve existing status or default to pending
     ]);
   } catch (error) {
     console.error('❌ Failed to sync chat to SQLite:', error);

@@ -20,6 +20,7 @@ export const CREATE_MESSAGES_TABLE = `
     text TEXT,
     mediaUrl TEXT,
     mediaMime TEXT,
+    localMediaPath TEXT,
     replyToId TEXT,
     status TEXT NOT NULL CHECK(status IN ('sending', 'sent', 'delivered', 'read', 'failed')),
     createdAt INTEGER NOT NULL,
@@ -73,7 +74,12 @@ export const CREATE_CHATS_TABLE = `
     unreadCount INTEGER DEFAULT 0,
     isMuted INTEGER DEFAULT 0,
     isPinned INTEGER DEFAULT 0,
-    archivedAt INTEGER
+    archivedAt INTEGER,
+    
+    -- Sync tracking
+    syncStatus TEXT DEFAULT 'pending' CHECK(syncStatus IN ('pending', 'syncing', 'synced', 'failed')),
+    lastSyncedAt INTEGER,
+    messageCount INTEGER DEFAULT 0
   );
 `;
 
@@ -219,7 +225,7 @@ export const ALL_TABLES = [
  * Database version
  * Increment this when schema changes to trigger migrations
  */
-export const DATABASE_VERSION = 7;
+export const DATABASE_VERSION = 8;
 
 /**
  * Database name

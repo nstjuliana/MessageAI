@@ -10,6 +10,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { ActivityProvider } from '@/contexts/ActivityContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { ChatSyncProvider } from '@/contexts/ChatSyncContext';
 import { NetworkProvider } from '@/contexts/NetworkContext';
 import { NotificationProvider, useNotifications } from '@/contexts/NotificationContext';
 import { ProfileCacheProvider } from '@/contexts/ProfileCacheContext';
@@ -118,9 +119,11 @@ export default function AuthenticatedLayout() {
   return (
     <NetworkProvider>
       <ProfileCacheProvider>
-        <NotificationProvider>
-          <AuthenticatedContent />
-        </NotificationProvider>
+        <ChatSyncProvider>
+          <NotificationProvider>
+            <AuthenticatedContent />
+          </NotificationProvider>
+        </ChatSyncProvider>
       </ProfileCacheProvider>
     </NetworkProvider>
   );
