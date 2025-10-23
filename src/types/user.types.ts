@@ -57,6 +57,7 @@ export interface PublicUserProfile {
   username: string;
   displayName: string;
   avatarUrl?: string;
+  avatarBlob?: string; // Base64 encoded avatar image for offline use
   bio?: string;
   presence: UserPresence;
   lastSeen: number;

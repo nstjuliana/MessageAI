@@ -243,9 +243,83 @@ async function migrateDatabase(fromVersion: number, toVersion: number): Promise<
       }
     }
     
+    // Version 4 migrations - Add new columns to chats table
+    if (fromVersion < 4 && toVersion >= 4) {
+      console.log('Migrating to version 4: Adding columns to chats table');
+      
+      // Try to add columns one by one
+      const columnsToAdd = [
+        { name: 'lastMessageSenderId', definition: 'TEXT' },
+        { name: 'participantIds', definition: 'TEXT NOT NULL DEFAULT "[]"' },
+        { name: 'adminIds', definition: 'TEXT' },
+      ];
+      
+      for (const column of columnsToAdd) {
+        try {
+          await db.execAsync(`ALTER TABLE chats ADD COLUMN ${column.name} ${column.definition}`);
+          console.log(`✅ Added ${column.name} column to chats table`);
+        } catch (error: any) {
+          if (error.message?.includes('duplicate column name') || 
+              error.message?.includes('already exists')) {
+            console.log(`✅ ${column.name} column already exists`);
+          } else {
+            console.error(`⚠️ Could not add ${column.name} column:`, error.message);
+          }
+        }
+      }
+      
+      console.log('✅ Chats table migration completed');
+    }
+    
+    // Version 5 migrations - Create profiles table
+    if (fromVersion < 5 && toVersion >= 5) {
+      console.log('Migrating to version 5: Creating profiles table');
+      const { CREATE_PROFILES_TABLE, CREATE_PROFILES_INDEXES } = await import('./schema');
+      await db.execAsync(CREATE_PROFILES_TABLE);
+      await db.execAsync(CREATE_PROFILES_INDEXES);
+      console.log('✅ Profiles table created');
+    }
+    
+    // Version 6 migrations - Add avatarBlob column to profiles table
+    if (fromVersion < 6 && toVersion >= 6) {
+      console.log('Migrating to version 6: Adding avatarBlob column to profiles table');
+      try {
+        await db.execAsync('ALTER TABLE profiles ADD COLUMN avatarBlob TEXT');
+        console.log('✅ Added avatarBlob column to profiles table');
+        
+        // Clear existing profiles so they're re-cached with image blobs
+        console.log('🗑️ Clearing old profiles (will re-download with images)...');
+        await db.execAsync('DELETE FROM profiles');
+        console.log('✅ Profiles cleared - will re-cache with images on next use');
+      } catch (error: any) {
+        if (error.message?.includes('duplicate column name') || 
+            error.message?.includes('already exists')) {
+          console.log('✅ avatarBlob column already exists');
+        } else {
+          console.error('⚠️ Could not add avatarBlob column:', error.message);
+        }
+      }
+    }
+    
     console.log('Migration completed successfully');
   } catch (error) {
     console.error('Migration failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Clear profiles table to force re-cache with image blobs
+ */
+export async function clearProfilesCache(): Promise<void> {
+  if (!db) throw new Error('Database not initialized');
+  
+  try {
+    console.log('🗑️ Clearing profiles cache...');
+    await db.execAsync('DELETE FROM profiles');
+    console.log('✅ Profiles cache cleared - will re-download with images on next use');
+  } catch (error) {
+    console.error('Failed to clear profiles cache:', error);
     throw error;
   }
 }
@@ -266,6 +340,7 @@ export async function dropAllTables(): Promise<void> {
       DROP TABLE IF EXISTS chat_participants;
       DROP TABLE IF EXISTS messages;
       DROP TABLE IF EXISTS chats;
+      DROP TABLE IF EXISTS profiles;
       COMMIT;
     `);
     

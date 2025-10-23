@@ -24,7 +24,7 @@ import { onUserChatsSnapshot } from '@/services/chat.service';
 import { onUserPresenceChange, onUsersPresenceChange } from '@/services/presence.service';
 import { onUsersProfilesSnapshot } from '@/services/user.service';
 import type { Chat } from '@/types/chat.types';
-import type { User, UserPresence } from '@/types/user.types';
+import type { PublicUserProfile, User, UserPresence } from '@/types/user.types';
 
 export default function ChatsScreen() {
   const { user, logOut } = useAuth();
@@ -32,7 +32,7 @@ export default function ChatsScreen() {
   const { resetActivityTimer } = useActivity();
   const { getProfiles } = useProfileCache();
   const [chats, setChats] = useState<Chat[]>([]);
-  const [chatParticipants, setChatParticipants] = useState<Record<string, User>>({});
+  const [chatParticipants, setChatParticipants] = useState<Record<string, PublicUserProfile>>({});
   const [presenceData, setPresenceData] = useState<Record<string, { status: UserPresence; lastSeen: number }>>({});
   const [myPresence, setMyPresence] = useState<UserPresence>('online');
   const [loading, setLoading] = useState(true);
@@ -106,7 +106,13 @@ export default function ChatsScreen() {
     const unsubscribe = onUsersProfilesSnapshot(
       participantIdsArray,
       (participantsMap) => {
-        console.log('🔄 Participant profiles updated from Firestore');
+        // Only update if we got data (don't clear cached profiles on network failure)
+        if (Object.keys(participantsMap).length === 0) {
+          console.log('⚠️ Firestore returned empty profiles (likely offline), keeping cached data');
+          return;
+        }
+        
+        console.log('🔄 Participant profiles updated from Firestore:', Object.keys(participantsMap).length);
         setChatParticipants(participantsMap);
       }
     );
@@ -187,6 +193,7 @@ export default function ChatsScreen() {
         subtitle: chat.lastMessageText || 'No messages yet',
         presence: 'offline' as UserPresence,
         avatarUrl: undefined,
+        avatarBlob: undefined,
       };
     }
 
@@ -195,13 +202,12 @@ export default function ChatsScreen() {
     const otherParticipant = otherParticipantId ? chatParticipants[otherParticipantId] : null;
     const presence = otherParticipantId ? presenceData[otherParticipantId]?.status || 'offline' : 'offline';
 
-    console.log('otherParticipant', otherParticipant?.displayName, otherParticipant?.avatarUrl);
-
     return {
       title: otherParticipant?.displayName || 'Unknown User',
       subtitle: chat.lastMessageText || 'No messages yet',
       presence,
       avatarUrl: otherParticipant?.avatarUrl,
+      avatarBlob: otherParticipant?.avatarBlob,
     };
   };
 
@@ -238,7 +244,7 @@ export default function ChatsScreen() {
   };
 
   const renderChatItem = ({ item }: { item: Chat }) => {
-    const { title, subtitle, presence, avatarUrl } = getChatDisplayInfo(item);
+    const { title, subtitle, presence, avatarUrl, avatarBlob } = getChatDisplayInfo(item);
 
     return (
       <TouchableOpacity
@@ -250,7 +256,12 @@ export default function ChatsScreen() {
         {/* Avatar with presence indicator */}
         <View style={styles.avatarContainer}>
           <View style={styles.avatar}>
-            {avatarUrl ? (
+            {avatarBlob ? (
+              <Image 
+                source={{ uri: `data:image/jpeg;base64,${avatarBlob}` }} 
+                style={styles.avatarImage} 
+              />
+            ) : avatarUrl ? (
               <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
             ) : (
               <Text style={styles.avatarText}>

@@ -4,6 +4,7 @@
  */
 
 import { db } from '@/config/firebase';
+import { executeStatement, getDatabase } from '@/database/database';
 import type { Chat, CreateChatData, CreateMessageData, Message } from '@/types/chat.types';
 import {
     collection,
@@ -25,6 +26,120 @@ const MESSAGES_COLLECTION = 'messages';
 
 // MessageAI system user ID (consistent across all users)
 export const MESSAGE_AI_USER_ID = 'messageai-system';
+
+/**
+ * Sync chat to SQLite for offline access
+ */
+async function syncChatToSQLite(chat: Chat): Promise<void> {
+  try {
+    const sqlite = getDatabase();
+    
+    const sql = `
+      INSERT OR REPLACE INTO chats (
+        id, type, lastMessageId, lastMessageText, lastMessageSenderId,
+        lastMessageAt, createdAt, updatedAt, participantIds, adminIds,
+        groupName, groupAvatarUrl
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+    
+    await executeStatement(sql, [
+      chat.id,
+      chat.type,
+      chat.lastMessageId || null,
+      chat.lastMessageText || null,
+      chat.lastMessageSenderId || null,
+      chat.lastMessageAt || 0,
+      chat.createdAt,
+      chat.updatedAt,
+      JSON.stringify(chat.participantIds),
+      JSON.stringify(chat.adminIds || []),
+      chat.groupName || null,
+      chat.groupAvatarUrl || null,
+    ]);
+  } catch (error) {
+    console.error('❌ Failed to sync chat to SQLite:', error);
+  }
+}
+
+/**
+ * Get chat from SQLite (instant, offline-first)
+ */
+export async function getChatFromSQLite(chatId: string): Promise<Chat | null> {
+  try {
+    const sqlite = getDatabase();
+    
+    const sql = `
+      SELECT 
+        id, type, lastMessageId, lastMessageText, lastMessageSenderId,
+        lastMessageAt, createdAt, updatedAt, participantIds, adminIds,
+        groupName, groupAvatarUrl
+      FROM chats
+      WHERE id = ?
+    `;
+    
+    const row = await sqlite.getFirstAsync<any>(sql, [chatId]);
+    
+    if (!row) return null;
+    
+    return {
+      id: row.id,
+      type: row.type,
+      participantIds: JSON.parse(row.participantIds),
+      adminIds: JSON.parse(row.adminIds || '[]'),
+      groupName: row.groupName || undefined,
+      groupAvatarUrl: row.groupAvatarUrl || undefined,
+      lastMessageId: row.lastMessageId || undefined,
+      lastMessageText: row.lastMessageText || undefined,
+      lastMessageSenderId: row.lastMessageSenderId || undefined,
+      lastMessageAt: row.lastMessageAt || 0,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  } catch (error) {
+    console.error('❌ Failed to get chat from SQLite:', error);
+    return null;
+  }
+}
+
+/**
+ * Get all chats from SQLite (for chat list)
+ */
+export async function getChatsFromSQLite(userId: string): Promise<Chat[]> {
+  try {
+    const sqlite = getDatabase();
+    
+    const sql = `
+      SELECT 
+        id, type, lastMessageId, lastMessageText, lastMessageSenderId,
+        lastMessageAt, createdAt, updatedAt, participantIds, adminIds,
+        groupName, groupAvatarUrl
+      FROM chats
+      WHERE participantIds LIKE ?
+      ORDER BY lastMessageAt DESC
+    `;
+    
+    // Use LIKE to search for userId in JSON array
+    const result = await sqlite.getAllAsync<any>(sql, [`%"${userId}"%`]);
+    
+    return result.map((row) => ({
+      id: row.id,
+      type: row.type,
+      participantIds: JSON.parse(row.participantIds),
+      adminIds: JSON.parse(row.adminIds || '[]'),
+      groupName: row.groupName || undefined,
+      groupAvatarUrl: row.groupAvatarUrl || undefined,
+      lastMessageId: row.lastMessageId || undefined,
+      lastMessageText: row.lastMessageText || undefined,
+      lastMessageSenderId: row.lastMessageSenderId || undefined,
+      lastMessageAt: row.lastMessageAt || 0,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    }));
+  } catch (error) {
+    console.error('❌ Failed to get chats from SQLite:', error);
+    return [];
+  }
+}
 
 /**
  * Create MessageAI system user if it doesn't exist
@@ -271,7 +386,7 @@ export function onUserChatsSnapshot(
 
     const unsubscribe = onSnapshot(
       chatsQuery,
-      (snapshot) => {
+      async (snapshot) => {
         const chats: Chat[] = snapshot.docs.map((doc) => {
           const data = doc.data();
           return {
@@ -291,11 +406,30 @@ export function onUserChatsSnapshot(
         });
 
         console.log(`📱 Received ${chats.length} chats for user ${userId}`);
+        
+        // Sync all chats to SQLite for offline access
+        for (const chat of chats) {
+          await syncChatToSQLite(chat);
+        }
+        console.log(`💾 Synced ${chats.length} chats to SQLite`);
+        
         callback(chats);
       },
-      (error) => {
-        console.error('Error listening to chats:', error);
-        callback([]); // Return empty array on error
+      (error: any) => {
+        // Handle offline errors gracefully
+        const errorCode = error?.code || '';
+        const errorMessage = error?.message || '';
+        
+        if (errorCode === 'permission-denied' || 
+            errorCode === 'unavailable' ||
+            errorMessage.includes('Missing or insufficient privileges') ||
+            errorMessage.includes('offline') ||
+            errorMessage.includes('network')) {
+          console.log('⚠️ Firestore chat listener offline - will retry when back online');
+        } else {
+          console.error('Error listening to chats:', error);
+        }
+        // Don't callback with empty array - app will use SQLite data
       }
     );
 
@@ -446,9 +580,21 @@ export function onChatMessagesSnapshot(
         console.log(`📱 Received ${messages.length} messages for chat ${chatId}`);
         callback(messages);
       },
-      (error) => {
-        console.error('❌ Error listening to messages:', error);
-        callback([]);
+      (error: any) => {
+        // Handle offline errors gracefully - we already have SQLite data
+        const errorCode = error?.code || '';
+        const errorMessage = error?.message || '';
+        
+        if (errorCode === 'permission-denied' || 
+            errorCode === 'unavailable' ||
+            errorMessage.includes('Missing or insufficient privileges') ||
+            errorMessage.includes('offline') ||
+            errorMessage.includes('network')) {
+          console.log('⚠️ Firestore listener offline (expected in airplane mode) - using cached data');
+        } else {
+          console.error('❌ Error listening to messages:', error);
+        }
+        // Don't callback with empty array - keep existing data
       }
     );
 

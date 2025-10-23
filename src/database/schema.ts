@@ -56,9 +56,14 @@ export const CREATE_CHATS_TABLE = `
     type TEXT NOT NULL CHECK(type IN ('dm', 'group')),
     lastMessageId TEXT,
     lastMessageText TEXT,
+    lastMessageSenderId TEXT,
     lastMessageAt INTEGER,
     createdAt INTEGER NOT NULL,
     updatedAt INTEGER NOT NULL,
+    
+    -- Participant IDs stored as JSON array
+    participantIds TEXT NOT NULL,
+    adminIds TEXT,
     
     -- Group chat specific
     groupName TEXT,
@@ -77,6 +82,29 @@ export const CREATE_CHATS_INDEXES = `
   CREATE INDEX IF NOT EXISTS idx_chats_type ON chats(type);
   CREATE INDEX IF NOT EXISTS idx_chats_pinned ON chats(isPinned DESC, lastMessageAt DESC);
   CREATE INDEX IF NOT EXISTS idx_chats_archived ON chats(archivedAt) WHERE archivedAt IS NOT NULL;
+`;
+
+/**
+ * User Profiles Cache Table
+ * Stores user profile data for offline access
+ */
+export const CREATE_PROFILES_TABLE = `
+  CREATE TABLE IF NOT EXISTS profiles (
+    userId TEXT PRIMARY KEY,
+    username TEXT NOT NULL,
+    displayName TEXT NOT NULL,
+    avatarUrl TEXT,
+    avatarBlob TEXT,
+    bio TEXT,
+    lastSeen INTEGER,
+    cachedAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL
+  );
+`;
+
+export const CREATE_PROFILES_INDEXES = `
+  CREATE INDEX IF NOT EXISTS idx_profiles_updatedAt ON profiles(updatedAt DESC);
+  CREATE INDEX IF NOT EXISTS idx_profiles_username ON profiles(username);
 `;
 
 /**
@@ -176,6 +204,8 @@ export const ALL_TABLES = [
   CREATE_MESSAGES_INDEXES,
   CREATE_CHATS_TABLE,
   CREATE_CHATS_INDEXES,
+  CREATE_PROFILES_TABLE,
+  CREATE_PROFILES_INDEXES,
   CREATE_CHAT_PARTICIPANTS_TABLE,
   CREATE_CHAT_PARTICIPANTS_INDEXES,
   CREATE_TYPING_TABLE,
@@ -189,7 +219,7 @@ export const ALL_TABLES = [
  * Database version
  * Increment this when schema changes to trigger migrations
  */
-export const DATABASE_VERSION = 3;
+export const DATABASE_VERSION = 6;
 
 /**
  * Database name

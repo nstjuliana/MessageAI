@@ -25,7 +25,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { useProfileCache } from '@/contexts/ProfileCacheContext';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
-import { getChatById, onChatMessagesSnapshot } from '@/services/chat.service';
+import { getChatById, getChatFromSQLite, onChatMessagesSnapshot } from '@/services/chat.service';
 import {
   getMessagesFromSQLite,
   markMessageAsDelivered,
@@ -43,7 +43,7 @@ export default function ChatScreen() {
   const { user } = useAuth();
   const { resetActivityTimer } = useActivity();
   const { setActiveChatId } = useNotifications();
-  const { getProfiles } = useProfileCache();
+  const { getProfiles, cacheProfile, getCachedProfile } = useProfileCache();
   const { onTypingStart, clearTyping } = useTypingIndicator(chatId || null, user?.uid || null);
   
   const [chat, setChat] = useState<Chat | null>(null);
@@ -98,31 +98,66 @@ export default function ChatScreen() {
       try {
         setLoading(true);
 
-        // 1. Load messages from SQLite FIRST (instant load - no network)
+        // 1. Load chat metadata from SQLite FIRST (instant, no network)
+        const chatDataFromSQLite = await getChatFromSQLite(chatId);
+        if (chatDataFromSQLite) {
+          setChat(chatDataFromSQLite);
+          console.log('💾 Chat loaded from SQLite (instant)');
+          
+          // Pre-load participant profiles immediately
+          const participantIds = chatDataFromSQLite.participantIds.filter(id => id !== user.uid);
+          if (participantIds.length > 0) {
+            getProfiles(participantIds).then((profilesMap) => {
+              console.log(`📦 Pre-loaded ${Object.keys(profilesMap).length} profiles`);
+              // Log avatar status for each profile
+              Object.entries(profilesMap).forEach(([id, profile]) => {
+                const hasBlob = !!profile.avatarBlob;
+                const hasUrl = !!profile.avatarUrl;
+                console.log(`  👤 ${profile.displayName}: avatarBlob=${hasBlob ? 'YES ('+Math.round(profile.avatarBlob!.length/1024)+'KB)' : 'NO'}, avatarUrl=${hasUrl ? 'YES' : 'NO'}`);
+              });
+              console.log('🔄 Setting participants state with:', JSON.stringify(Object.keys(profilesMap).map(id => ({
+                id,
+                displayName: profilesMap[id].displayName,
+                hasBlob: !!profilesMap[id].avatarBlob,
+                blobLength: profilesMap[id].avatarBlob?.length || 0,
+              }))));
+              setParticipants(profilesMap);
+            });
+          }
+        }
+
+        // 2. Load messages from SQLite (instant load - no network)
+        // Only load first 20 messages initially for fast rendering
         messagesFromSQLite = await getMessagesFromSQLite(chatId);
-        setMessages(messagesFromSQLite);
+        const recentMessages = messagesFromSQLite.slice(-20); // Last 20 messages
+        setMessages(recentMessages);
         setLoading(false); // Stop showing spinner immediately
+        
+        console.log(`💾 Loaded ${recentMessages.length} messages from SQLite (${messagesFromSQLite.length} total available)`);
         
         // Scroll to bottom immediately after setting messages (on next frame)
         setTimeout(() => {
-          if (flatListRef.current && messagesFromSQLite.length > 0) {
+          if (flatListRef.current && recentMessages.length > 0) {
             flatListRef.current.scrollToEnd({ animated: false });
           }
         }, 0);
 
-        // 2. Load chat metadata and participants in parallel (background)
-        const [chatData] = await Promise.all([
-          getChatById(chatId),
-          // Load participants after we have chat data
-        ]);
-        
-        if (!chatData) {
-          console.error('Chat not found');
-          return;
+        // 3. Only sync from Firestore if we don't have local data (edge case)
+        if (!chatDataFromSQLite) {
+          console.log('⚠️ No local chat data, fetching from Firestore...');
+          const chatData = await getChatById(chatId);
+          if (chatData) {
+            setChat(chatData);
+            console.log('🌐 Chat synced from Firestore (fallback)');
+          } else {
+            console.error('Chat not found in SQLite or Firestore');
+            return;
+          }
         }
-        setChat(chatData);
 
-        // 3. Listen to messages in real-time from Firestore
+        // 4. Set up Firestore listener for real-time updates (background, non-blocking)
+        // This will sync new messages but won't affect initial load
+        console.log('🔄 Setting up Firestore listener for real-time updates...');
         unsubscribeMessages = onChatMessagesSnapshot(chatId, async (firestoreMessages) => {
           messagesFromFirestore = firestoreMessages;
           
@@ -199,29 +234,31 @@ export default function ChatScreen() {
     };
   }, [chatId, user]);
 
-  // Load participant profiles (with caching for instant display)
+  // Set up real-time profile listener (profiles are already pre-loaded above)
   useEffect(() => {
     if (!chatId || !user || !chat) return;
 
     const participantIds = chat.participantIds.filter(id => id !== user.uid);
     if (participantIds.length === 0) return;
 
-    console.log(`👥 Loading profiles for ${participantIds.length} participant(s)`);
+    console.log(`📡 Setting up real-time profile listener`);
 
-    // Load profiles from cache (instant display if available)
-    getProfiles(participantIds).then((profilesMap) => {
-      console.log(`📦 Loaded ${Object.keys(profilesMap).length} profiles from cache`);
-      setParticipants(profilesMap);
-    });
-
-    // Also set up real-time listener for updates (avatar changes, name changes, etc.)
-    const unsubscribe = onUsersProfilesSnapshot(participantIds, (profilesMap) => {
-      console.log('🔄 Participant profiles updated from Firestore');
+    // Set up real-time listener for profile updates (avatar changes, name changes, etc.)
+    const unsubscribe = onUsersProfilesSnapshot(participantIds, async (profilesMap) => {
+      // Only update if we got data (don't clear cached profiles on network failure)
+      if (Object.keys(profilesMap).length === 0) {
+        console.log('⚠️ Firestore returned empty profiles (likely offline), keeping cached data');
+        return;
+      }
       
-      // Convert to PublicUserProfile format and update state
+      console.log('🔄 Participant profiles updated from Firestore:', Object.keys(profilesMap).length);
+      
+      // Convert to PublicUserProfile format and cache to SQLite
       const publicProfilesMap: Record<string, PublicUserProfile> = {};
-      Object.entries(profilesMap).forEach(([id, profile]) => {
-        publicProfilesMap[id] = {
+      
+      // Cache all profiles and wait for completion
+      for (const [id, profile] of Object.entries(profilesMap)) {
+        const publicProfile: PublicUserProfile = {
           id: profile.id,
           username: profile.username,
           displayName: profile.displayName,
@@ -230,8 +267,28 @@ export default function ChatScreen() {
           presence: 'offline', // Will be updated by RTDB listener
           lastSeen: profile.lastSeen,
         };
-      });
+        
+        try {
+          // Cache profile to SQLite (this downloads images and updates L1 cache)
+          await cacheProfile(publicProfile);
+          
+          // Now get the cached version with the blob
+          const cachedProfile = getCachedProfile(id);
+          if (cachedProfile) {
+            publicProfilesMap[id] = cachedProfile;
+            console.log(`✅ Updated participant with blob: ${cachedProfile.displayName}, hasBlob=${!!cachedProfile.avatarBlob}`);
+          } else {
+            // Fallback if cache read failed
+            publicProfilesMap[id] = publicProfile;
+          }
+        } catch (err) {
+          console.error('Failed to cache profile:', err);
+          // Use the profile without blob as fallback
+          publicProfilesMap[id] = publicProfile;
+        }
+      }
       
+      // Update UI with profiles that include blobs
       setParticipants(publicProfilesMap);
     });
 
@@ -239,7 +296,7 @@ export default function ChatScreen() {
       console.log('👋 Cleaning up profile listeners');
       unsubscribe();
     };
-  }, [chatId, user, chat, getProfiles]);
+  }, [chatId, user, chat]);
 
   // Subscribe to presence data for all participants (from RTDB)
   // Same pattern as chats.tsx - store presence separately to avoid infinite loops
@@ -320,10 +377,26 @@ export default function ChatScreen() {
   };
 
   const handleRefresh = async () => {
+    if (!chatId) return;
+    
     setRefreshing(true);
-    // TODO: Load older messages
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setRefreshing(false);
+    try {
+      // Load older messages from SQLite
+      const allMessages = await getMessagesFromSQLite(chatId);
+      
+      // If we have more messages in SQLite than currently showing, load them
+      if (allMessages.length > messages.length) {
+        console.log(`📜 Loading ${allMessages.length - messages.length} more messages from SQLite`);
+        setMessages(allMessages);
+      } else {
+        console.log('📜 All local messages already loaded. Pull-to-refresh for Firestore sync is background-only.');
+        // Note: Firestore listener already handles syncing new messages in background
+      }
+    } catch (error) {
+      console.error('Error loading older messages:', error);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const getChatTitle = (): string => {
@@ -342,18 +415,45 @@ export default function ChatScreen() {
   const getOtherParticipant = () => {
     if (!chat || chat.type === 'group') return null;
     const otherParticipantId = chat.participantIds.find(id => id !== user?.uid);
-    if (!otherParticipantId) return null;
+    if (!otherParticipantId) {
+      console.log('⚠️ getOtherParticipant: No otherParticipantId found');
+      return null;
+    }
+    
+    console.log('🔍 getOtherParticipant: Looking for participant', otherParticipantId);
+    console.log('🔍 Current participants state keys:', Object.keys(participants));
     
     // Merge participant data with live presence from RTDB
     const participant = participants[otherParticipantId];
-    if (!participant) return null;
+    if (!participant) {
+      console.log('⚠️ getOtherParticipant: No participant found for', otherParticipantId);
+      console.log('⚠️ All participants:', JSON.stringify(participants));
+      return null;
+    }
+    
+    console.log('🔍 Raw participant from state:', {
+      displayName: participant.displayName,
+      hasAvatarUrl: !!participant.avatarUrl,
+      hasAvatarBlob: !!participant.avatarBlob,
+      avatarBlobLength: participant.avatarBlob?.length || 0,
+      avatarBlobPreview: participant.avatarBlob?.substring(0, 50),
+    });
     
     const presence = presenceData[otherParticipantId];
-    return {
+    const result = {
       ...participant,
       presence: presence?.status || 'offline',
       lastSeen: presence?.lastSeen || participant.lastSeen,
     };
+    
+    console.log('🔍 getOtherParticipant result:', {
+      displayName: result.displayName,
+      hasAvatarUrl: !!result.avatarUrl,
+      hasAvatarBlob: !!result.avatarBlob,
+      avatarBlobLength: result.avatarBlob?.length || 0,
+    });
+    
+    return result;
   };
 
   const getPresenceColor = (presence?: 'online' | 'away' | 'offline'): string => {
@@ -378,17 +478,22 @@ export default function ChatScreen() {
     return (
       <View style={[styles.messageContainer, isSent ? styles.sentContainer : styles.receivedContainer]}>
         {/* Avatar for received messages in groups */}
-        {!isSent && chat?.type === 'group' && (
-          <View style={styles.avatar}>
-            {sender?.avatarUrl ? (
-              <Image source={{ uri: sender.avatarUrl }} style={styles.avatarImage} />
-            ) : (
-              <Text style={styles.avatarText}>
-                {sender?.displayName?.charAt(0).toUpperCase() || '?'}
-              </Text>
-            )}
-          </View>
-        )}
+         {!isSent && chat?.type === 'group' && (
+           <View style={styles.avatar}>
+             {sender?.avatarBlob ? (
+               <Image 
+                 source={{ uri: `data:image/jpeg;base64,${sender.avatarBlob}` }} 
+                 style={styles.avatarImage} 
+               />
+             ) : sender?.avatarUrl ? (
+               <Image source={{ uri: sender.avatarUrl }} style={styles.avatarImage} />
+             ) : (
+               <Text style={styles.avatarText}>
+                 {sender?.displayName?.charAt(0).toUpperCase() || '?'}
+               </Text>
+             )}
+           </View>
+         )}
 
         <View style={{ flex: 1 }}>
           {/* Sender name for received messages */}
@@ -500,16 +605,42 @@ export default function ChatScreen() {
             <View style={styles.headerAvatarContainer}>
               <View style={styles.headerAvatarWrapper}>
                 <View style={styles.headerAvatar}>
-                  {getOtherParticipant()?.avatarUrl ? (
-                    <Image 
-                      source={{ uri: getOtherParticipant()?.avatarUrl }} 
-                      style={styles.headerAvatarImage} 
-                    />
-                  ) : (
-                    <Text style={styles.headerAvatarText}>
-                      {getOtherParticipant()?.displayName?.charAt(0).toUpperCase() || '?'}
-                    </Text>
-                  )}
+                  {(() => {
+                    const participant = getOtherParticipant();
+                    console.log('🎨 RENDERING AVATAR:', {
+                      hasParticipant: !!participant,
+                      displayName: participant?.displayName,
+                      hasAvatarBlob: !!participant?.avatarBlob,
+                      avatarBlobLength: participant?.avatarBlob?.length || 0,
+                      hasAvatarUrl: !!participant?.avatarUrl,
+                      avatarUrl: participant?.avatarUrl?.substring(0, 50) + '...',
+                    });
+                    
+                    if (participant?.avatarBlob) {
+                      console.log('✅ Using avatarBlob!');
+                      return (
+                        <Image 
+                          source={{ uri: `data:image/jpeg;base64,${participant.avatarBlob}` }} 
+                          style={styles.headerAvatarImage} 
+                        />
+                      );
+                    } else if (participant?.avatarUrl) {
+                      console.log('⚠️ Falling back to avatarUrl (offline will fail!)');
+                      return (
+                        <Image 
+                          source={{ uri: participant.avatarUrl }} 
+                          style={styles.headerAvatarImage} 
+                        />
+                      );
+                    } else {
+                      console.log('❌ No avatar, showing placeholder');
+                      return (
+                        <Text style={styles.headerAvatarText}>
+                          {participant?.displayName?.charAt(0).toUpperCase() || '?'}
+                        </Text>
+                      );
+                    }
+                  })()}
                 </View>
                 {/* Status indicator - sibling of avatar, not child */}
                 <View style={[

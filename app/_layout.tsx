@@ -7,7 +7,7 @@ import 'react-native-reanimated';
 
 import { AuthProvider } from '@/contexts/AuthContext';
 import { UserProvider } from '@/contexts/UserContext';
-import { initDatabase } from '@/database/database';
+import { initDatabase, rebuildDatabase } from '@/database/database';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function RootLayout() {
@@ -16,15 +16,26 @@ export default function RootLayout() {
 
   // Initialize database on app start
   useEffect(() => {
-    initDatabase()
+    // FORCE DATABASE REBUILD - Remove this after migration completes!
+    console.log('🔄 Forcing database rebuild to apply schema changes...');
+    rebuildDatabase()
       .then(() => {
-        console.log('Database initialized');
+        console.log('✅ Database rebuilt successfully');
         setDbInitialized(true);
       })
       .catch((error) => {
-        console.error('Failed to initialize database:', error);
-        // Still allow app to run without local database
-        setDbInitialized(true);
+        console.error('❌ Failed to rebuild database:', error);
+        // Try regular init as fallback
+        initDatabase()
+          .then(() => {
+            console.log('Database initialized (fallback)');
+            setDbInitialized(true);
+          })
+          .catch((initError) => {
+            console.error('Failed to initialize database:', initError);
+            // Still allow app to run without local database
+            setDbInitialized(true);
+          });
       });
   }, []);
 
