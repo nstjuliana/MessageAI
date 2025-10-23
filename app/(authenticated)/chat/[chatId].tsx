@@ -105,6 +105,7 @@ const MessageItem = React.memo(({
                 {currentStatus === 'delivered' && (
                   <View style={styles.doubleCheck}>
                     <IconSymbol name="checkmark" size={12} color="#999" style={styles.statusIcon} />
+                    <IconSymbol name="checkmark" size={12} color="#999" style={styles.statusIcon} />
                   </View>
                 )}
                 {currentStatus === 'failed' && (
@@ -267,6 +268,7 @@ export default function ChatScreen() {
               // - Current user is NOT the sender (recipient receiving the message)
               // - We haven't already marked it (check previous status)
               if (message.status === 'sent' && message.senderId !== user.uid && !previousHash?.includes('-delivered')) {
+                console.log(`📬 Marking message ${message.id} as delivered`);
                 await markMessageAsDelivered(chatId, message.id, user.uid, message.senderId);
               }
             }
