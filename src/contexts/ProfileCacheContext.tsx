@@ -48,14 +48,14 @@ async function downloadImageToLocalStorage(url: string, userId: string): Promise
     const fileName = `avatar_${userId}.jpg`;
     const localPath = avatarsDir + fileName;
     
-    // Check if old avatar exists and delete it
+    // Check if file already exists - if so, skip download
     const existingFile = await FileSystem.getInfoAsync(localPath);
     if (existingFile.exists) {
-      console.log(`🗑️ Deleting old avatar for user ${userId}`);
-      await FileSystem.deleteAsync(localPath, { idempotent: true });
+      console.log(`✅ Avatar already cached for user ${userId}, skipping download`);
+      return localPath;
     }
     
-    console.log(`📥 Downloading new avatar to: ${localPath}`);
+    console.log(`📥 Downloading avatar to: ${localPath}`);
     
     // Download to permanent location
     const response = await FileSystem.downloadAsync(url, localPath);
@@ -303,7 +303,16 @@ export function ProfileCacheProvider({ children }: { children: React.ReactNode }
     for (const userId of userIds) {
       const cached = cacheRef.current.get(userId);
       if (cached && isMemoryCacheValid(cached)) {
-        result[userId] = cached.profile;
+        // Check if profile has avatarUrl but missing local file - if so, it's incomplete
+        const hasUrl = !!cached.profile.avatarUrl;
+        const hasLocalFile = !!cached.profile.avatarLocalPath;
+        
+        if (hasUrl && !hasLocalFile) {
+          console.log(`⚠️ L1 cache has profile WITHOUT local image - need to reload: ${userId}`);
+          toFetch.push(userId);
+        } else {
+          result[userId] = cached.profile;
+        }
       } else {
         toFetch.push(userId);
       }

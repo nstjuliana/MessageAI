@@ -202,7 +202,13 @@ export default function ChatScreen() {
           // Pre-load participant profiles immediately
           const participantIds = chatDataFromSQLite.participantIds.filter(id => id !== user.uid);
           if (participantIds.length > 0) {
-            getProfiles(participantIds).then(setParticipants);
+            getProfiles(participantIds).then(profiles => {
+              console.log('👤 Initial profiles loaded:', profiles);
+              Object.entries(profiles).forEach(([id, profile]) => {
+                console.log(`  - ${profile.displayName}: avatarUrl=${!!profile.avatarUrl}, avatarLocalPath=${!!profile.avatarLocalPath}`);
+              });
+              setParticipants(profiles);
+            });
           }
         }
 
