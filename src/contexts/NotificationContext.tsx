@@ -19,7 +19,7 @@ const NotificationContext = createContext<NotificationContextValue | undefined>(
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [currentNotification, setCurrentNotification] = useState<InAppNotificationData | null>(null);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  const lastProcessedMessageIdRef = useRef<string | null>(null);
+  const lastNotificationTimeRef = useRef<number>(0);
 
   const showNotification = (notification: InAppNotificationData) => {
     // Suppress if user is viewing this chat
@@ -28,10 +28,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       return;
     }
 
-    // Suppress duplicate notifications
-    const notificationId = `${notification.chatId}-${notification.messageText}`;
-    if (lastProcessedMessageIdRef.current === notificationId) {
-      console.log('📵 Notification suppressed: duplicate');
+    // Suppress duplicate notifications within 1 second (based on time, not content)
+    const now = Date.now();
+    if (now - lastNotificationTimeRef.current < 1000) {
+      console.log('📵 Notification suppressed: too soon after last notification');
       return;
     }
 
@@ -41,7 +41,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       message: notification.messageText.substring(0, 50),
     });
 
-    lastProcessedMessageIdRef.current = notificationId;
+    lastNotificationTimeRef.current = now;
     setCurrentNotification(notification);
   };
 
