@@ -4,7 +4,7 @@
  */
 
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -37,6 +37,100 @@ import { onTypingStatusChange } from '@/services/typing-rtdb.service';
 import { onUsersProfilesSnapshot } from '@/services/user.service';
 import type { Chat, Message, MessageStatus } from '@/types/chat.types';
 import type { PublicUserProfile } from '@/types/user.types';
+
+// Memoized Message Item Component for performance
+const MessageItem = React.memo(({ 
+  message, 
+  isSent, 
+  sender, 
+  currentStatus,
+  isGroupChat,
+}: { 
+  message: Message; 
+  isSent: boolean; 
+  sender?: PublicUserProfile;
+  currentStatus: MessageStatus;
+  isGroupChat: boolean;
+}) => {
+  return (
+    <View style={[styles.messageContainer, isSent ? styles.sentContainer : styles.receivedContainer]}>
+      {/* Avatar for received messages in groups */}
+      {!isSent && isGroupChat && (
+        <View style={styles.avatar}>
+          {sender?.avatarBlob ? (
+            <Image 
+              source={{ uri: `data:image/jpeg;base64,${sender.avatarBlob}` }} 
+              style={styles.avatarImage} 
+            />
+          ) : sender?.avatarUrl ? (
+            <Image source={{ uri: sender.avatarUrl }} style={styles.avatarImage} />
+          ) : (
+            <Text style={styles.avatarText}>
+              {sender?.displayName?.charAt(0).toUpperCase() || '?'}
+            </Text>
+          )}
+        </View>
+      )}
+
+      <View style={{ flex: 1 }}>
+        {/* Sender name for received messages */}
+        {!isSent && (
+          <Text style={styles.senderName}>
+            {sender?.displayName || 'Unknown'}
+          </Text>
+        )}
+
+        {/* Message bubble */}
+        <View style={[styles.messageBubble, isSent ? styles.sentBubble : styles.receivedBubble]}>
+          <Text style={[styles.messageText, isSent ? styles.sentText : styles.receivedText]}>
+            {message.text}
+          </Text>
+          <View style={styles.messageFooter}>
+            <Text style={[styles.timestamp, isSent ? styles.sentTimestamp : styles.receivedTimestamp]}>
+              {new Date(message.createdAt).toLocaleTimeString([], { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+              })}
+            </Text>
+            {/* Status indicators for sent messages */}
+            {isSent && (
+              <View style={styles.statusContainer}>
+                {currentStatus === 'sending' && (
+                  <IconSymbol name="clock" size={12} color="#999" style={styles.statusIcon} />
+                )}
+                {currentStatus === 'sent' && (
+                  <IconSymbol name="checkmark" size={12} color="#999" style={styles.statusIcon} />
+                )}
+                {currentStatus === 'delivered' && (
+                  <View style={styles.doubleCheck}>
+                    <IconSymbol name="checkmark" size={12} color="#999" style={styles.statusIcon} />
+                  </View>
+                )}
+                {currentStatus === 'failed' && (
+                  <IconSymbol name="exclamationmark.circle" size={12} color="#ff3b30" style={styles.statusIcon} />
+                )}
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparison function for better performance
+  return (
+    prevProps.message.id === nextProps.message.id &&
+    prevProps.message.text === nextProps.message.text &&
+    prevProps.currentStatus === nextProps.currentStatus &&
+    prevProps.isSent === nextProps.isSent &&
+    prevProps.sender?.id === nextProps.sender?.id &&
+    prevProps.sender?.avatarBlob === nextProps.sender?.avatarBlob &&
+    prevProps.sender?.displayName === nextProps.sender?.displayName &&
+    prevProps.isGroupChat === nextProps.isGroupChat
+  );
+});
+
+MessageItem.displayName = 'MessageItem';
 
 export default function ChatScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
@@ -107,22 +201,7 @@ export default function ChatScreen() {
           // Pre-load participant profiles immediately
           const participantIds = chatDataFromSQLite.participantIds.filter(id => id !== user.uid);
           if (participantIds.length > 0) {
-            getProfiles(participantIds).then((profilesMap) => {
-              console.log(`📦 Pre-loaded ${Object.keys(profilesMap).length} profiles`);
-              // Log avatar status for each profile
-              Object.entries(profilesMap).forEach(([id, profile]) => {
-                const hasBlob = !!profile.avatarBlob;
-                const hasUrl = !!profile.avatarUrl;
-                console.log(`  👤 ${profile.displayName}: avatarBlob=${hasBlob ? 'YES ('+Math.round(profile.avatarBlob!.length/1024)+'KB)' : 'NO'}, avatarUrl=${hasUrl ? 'YES' : 'NO'}`);
-              });
-              console.log('🔄 Setting participants state with:', JSON.stringify(Object.keys(profilesMap).map(id => ({
-                id,
-                displayName: profilesMap[id].displayName,
-                hasBlob: !!profilesMap[id].avatarBlob,
-                blobLength: profilesMap[id].avatarBlob?.length || 0,
-              }))));
-              setParticipants(profilesMap);
-            });
+            getProfiles(participantIds).then(setParticipants);
           }
         }
 
@@ -415,45 +494,18 @@ export default function ChatScreen() {
   const getOtherParticipant = () => {
     if (!chat || chat.type === 'group') return null;
     const otherParticipantId = chat.participantIds.find(id => id !== user?.uid);
-    if (!otherParticipantId) {
-      console.log('⚠️ getOtherParticipant: No otherParticipantId found');
-      return null;
-    }
-    
-    console.log('🔍 getOtherParticipant: Looking for participant', otherParticipantId);
-    console.log('🔍 Current participants state keys:', Object.keys(participants));
+    if (!otherParticipantId) return null;
     
     // Merge participant data with live presence from RTDB
     const participant = participants[otherParticipantId];
-    if (!participant) {
-      console.log('⚠️ getOtherParticipant: No participant found for', otherParticipantId);
-      console.log('⚠️ All participants:', JSON.stringify(participants));
-      return null;
-    }
-    
-    console.log('🔍 Raw participant from state:', {
-      displayName: participant.displayName,
-      hasAvatarUrl: !!participant.avatarUrl,
-      hasAvatarBlob: !!participant.avatarBlob,
-      avatarBlobLength: participant.avatarBlob?.length || 0,
-      avatarBlobPreview: participant.avatarBlob?.substring(0, 50),
-    });
+    if (!participant) return null;
     
     const presence = presenceData[otherParticipantId];
-    const result = {
+    return {
       ...participant,
       presence: presence?.status || 'offline',
       lastSeen: presence?.lastSeen || participant.lastSeen,
     };
-    
-    console.log('🔍 getOtherParticipant result:', {
-      displayName: result.displayName,
-      hasAvatarUrl: !!result.avatarUrl,
-      hasAvatarBlob: !!result.avatarBlob,
-      avatarBlobLength: result.avatarBlob?.length || 0,
-    });
-    
-    return result;
   };
 
   const getPresenceColor = (presence?: 'online' | 'away' | 'offline'): string => {
@@ -468,66 +520,22 @@ export default function ChatScreen() {
     }
   };
 
-  const renderMessage = ({ item }: { item: Message }) => {
+  // Memoized render function for better performance
+  const renderMessage = useCallback(({ item }: { item: Message }) => {
     const isSent = item.senderId === user?.uid;
     const sender = participants[item.senderId];
-    
-    // Get current status (use local state if available, otherwise use message status)
     const currentStatus = messageStatuses[item.id] || item.status;
     
     return (
-      <View style={[styles.messageContainer, isSent ? styles.sentContainer : styles.receivedContainer]}>
-        {/* Avatar for received messages in groups */}
-         {!isSent && chat?.type === 'group' && (
-           <View style={styles.avatar}>
-             {sender?.avatarBlob ? (
-               <Image 
-                 source={{ uri: `data:image/jpeg;base64,${sender.avatarBlob}` }} 
-                 style={styles.avatarImage} 
-               />
-             ) : sender?.avatarUrl ? (
-               <Image source={{ uri: sender.avatarUrl }} style={styles.avatarImage} />
-             ) : (
-               <Text style={styles.avatarText}>
-                 {sender?.displayName?.charAt(0).toUpperCase() || '?'}
-               </Text>
-             )}
-           </View>
-         )}
-
-        <View style={{ flex: 1 }}>
-          {/* Sender name for received messages */}
-          {!isSent && (
-            <Text style={styles.senderName}>
-              {sender?.displayName || 'Unknown User'}
-            </Text>
-          )}
-
-          {/* Message bubble */}
-          <View style={[styles.messageBubble, isSent ? styles.sentBubble : styles.receivedBubble]}>
-            <Text style={[styles.messageText, isSent ? styles.sentText : styles.receivedText]}>
-              {item.text}
-            </Text>
-            <View style={styles.messageFooter}>
-              <Text style={[styles.timestamp, isSent ? styles.sentTimestamp : styles.receivedTimestamp]}>
-                {formatTimestamp(item.createdAt)}
-              </Text>
-              {/* Status indicator for sent messages */}
-              {isSent && (
-                <Text style={[
-                  styles.statusIndicator,
-                  currentStatus === 'failed' && styles.statusFailed,
-                  currentStatus === 'sending' && styles.statusQueued,
-                ]}>
-                  {getStatusIndicator(currentStatus)}
-                </Text>
-              )}
-            </View>
-          </View>
-        </View>
-      </View>
+      <MessageItem 
+        message={item}
+        isSent={isSent}
+        sender={sender}
+        currentStatus={currentStatus}
+        isGroupChat={chat?.type === 'group'}
+      />
     );
-  };
+  }, [user?.uid, participants, messageStatuses, chat?.type]);
   
   const getStatusIndicator = (status: MessageStatus): string => {
     switch (status) {
@@ -607,17 +615,8 @@ export default function ChatScreen() {
                 <View style={styles.headerAvatar}>
                   {(() => {
                     const participant = getOtherParticipant();
-                    console.log('🎨 RENDERING AVATAR:', {
-                      hasParticipant: !!participant,
-                      displayName: participant?.displayName,
-                      hasAvatarBlob: !!participant?.avatarBlob,
-                      avatarBlobLength: participant?.avatarBlob?.length || 0,
-                      hasAvatarUrl: !!participant?.avatarUrl,
-                      avatarUrl: participant?.avatarUrl?.substring(0, 50) + '...',
-                    });
                     
                     if (participant?.avatarBlob) {
-                      console.log('✅ Using avatarBlob!');
                       return (
                         <Image 
                           source={{ uri: `data:image/jpeg;base64,${participant.avatarBlob}` }} 
@@ -625,7 +624,6 @@ export default function ChatScreen() {
                         />
                       );
                     } else if (participant?.avatarUrl) {
-                      console.log('⚠️ Falling back to avatarUrl (offline will fail!)');
                       return (
                         <Image 
                           source={{ uri: participant.avatarUrl }} 
@@ -633,7 +631,6 @@ export default function ChatScreen() {
                         />
                       );
                     } else {
-                      console.log('❌ No avatar, showing placeholder');
                       return (
                         <Text style={styles.headerAvatarText}>
                           {participant?.displayName?.charAt(0).toUpperCase() || '?'}
@@ -699,9 +696,12 @@ export default function ChatScreen() {
         bounces={true}
         // Dismiss keyboard interactively when dragging through it
         keyboardDismissMode="interactive"
-        // Render more items initially to ensure full list is laid out
-        initialNumToRender={50}
-        maxToRenderPerBatch={20}
+        // Performance optimizations
+        initialNumToRender={20}
+        maxToRenderPerBatch={10}
+        windowSize={21}
+        removeClippedSubviews={Platform.OS === 'android'}
+        updateCellsBatchingPeriod={50}
         // Scroll to end when layout completes (for initial load)
         onLayout={() => {
           if (isFirstLoadRef.current && messages.length > 0 && flatListRef.current) {
@@ -981,6 +981,18 @@ const styles = StyleSheet.create({
   },
   statusQueued: {
     color: 'rgba(255, 255, 255, 0.5)', // Dimmer for queued
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 4,
+  },
+  statusIcon: {
+    marginLeft: 2,
+  },
+  doubleCheck: {
+    flexDirection: 'row',
+    marginLeft: -4,
   },
   typingIndicator: {
     paddingHorizontal: 20,
