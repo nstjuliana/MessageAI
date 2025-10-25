@@ -15,6 +15,8 @@ import { executeStatement, getDatabase } from '@/database/database';
 import type { CreateMessageData, Message, MessageStatus } from '@/types/chat.types';
 import NetInfo from '@react-native-community/netinfo';
 import {
+  arrayUnion,
+  collection,
   doc,
   serverTimestamp,
   setDoc,
@@ -172,6 +174,8 @@ async function sendMessageToFirestore(
     senderId: message.senderId,
     status: 'sent',
     edited: false,
+    deliveredTo: [], // Initialize empty array for delivery tracking
+    readBy: [], // Initialize empty array for read tracking
     createdAt: serverTimestamp(),
   };
   
@@ -250,13 +254,13 @@ export async function markMessageAsDelivered(
   }
   
   try {
-    // Update in Firestore
-    await updateMessageStatusInFirestore(chatId, messageId, 'delivered');
+    // Update in Firestore - add user to deliveredTo array
+    const messageRef = doc(db, CHATS_COLLECTION, chatId, MESSAGES_COLLECTION, messageId);
+    await updateDoc(messageRef, {
+      deliveredTo: arrayUnion(currentUserId)
+    });
     
-    // Update in SQLite
-    await updateMessageStatusInSQLite(messageId, 'delivered', true);
-    
-    // Silent success - delivery status updates are frequent and not critical to log
+    console.log(`✅ Marked message ${messageId} as delivered to ${currentUserId}`);
   } catch (error) {
     console.error(`❌ Failed to mark message as delivered:`, error);
   }
@@ -278,13 +282,14 @@ export async function markMessageAsRead(
   }
   
   try {
-    // Update in Firestore
-    await updateMessageStatusInFirestore(chatId, messageId, 'read');
+    // Update in Firestore - add user to both arrays (reading implies delivery)
+    const messageRef = doc(db, CHATS_COLLECTION, chatId, MESSAGES_COLLECTION, messageId);
+    await updateDoc(messageRef, {
+      deliveredTo: arrayUnion(currentUserId),
+      readBy: arrayUnion(currentUserId)
+    });
     
-    // Update in SQLite
-    await updateMessageStatusInSQLite(messageId, 'read', true);
-    
-    // Silent success - read status updates are frequent and not critical to log
+    console.log(`✅ Marked message ${messageId} as read by ${currentUserId}`);
   } catch (error) {
     console.error(`❌ Failed to mark message as read:`, error);
   }
@@ -330,6 +335,35 @@ export async function markAllMessagesAsRead(
     console.log(`✅ Marked ${unreadMessages.length} messages as read`);
   } catch (error) {
     console.error('❌ Failed to mark all messages as read:', error);
+  }
+}
+
+/**
+ * Create a system message (for group events)
+ * System messages don't have a sender and are styled differently
+ * @param chatId - Chat ID
+ * @param text - System message text
+ */
+export async function createSystemMessage(
+  chatId: string,
+  text: string
+): Promise<void> {
+  try {
+    const messageRef = doc(collection(db, CHATS_COLLECTION, chatId, MESSAGES_COLLECTION));
+    
+    await setDoc(messageRef, {
+      chatId,
+      senderId: 'system', // Special sender ID for system messages
+      text,
+      status: 'sent',
+      edited: false,
+      createdAt: serverTimestamp(),
+    });
+    
+    console.log('✅ System message created');
+  } catch (error) {
+    console.error('❌ Failed to create system message:', error);
+    // Don't throw - system messages are not critical
   }
 }
 
@@ -455,7 +489,7 @@ export async function getMessagesFromSQLite(
     const sql = `
       SELECT 
         id, chatId, senderId, text, mediaUrl, mediaMime, localMediaPath,
-        replyToId, status, createdAt, edited, editedAt
+        replyToId, status, deliveredTo, readBy, createdAt, edited, editedAt
       FROM messages
       WHERE chatId = ?
       ORDER BY createdAt DESC
@@ -475,6 +509,8 @@ export async function getMessagesFromSQLite(
       localMediaPath: row.localMediaPath || undefined,
       replyToId: row.replyToId || undefined,
       status: row.status as MessageStatus,
+      deliveredTo: row.deliveredTo ? JSON.parse(row.deliveredTo) : [],
+      readBy: row.readBy ? JSON.parse(row.readBy) : [],
       edited: row.edited === 1,
       editedAt: row.editedAt || undefined,
       createdAt: row.createdAt,
@@ -519,15 +555,17 @@ export async function syncMessageToSQLite(message: Message): Promise<void> {
         
         // If not cached, cache it in background
         if (!localMediaPath) {
-          cacheMedia(message.mediaUrl, message.mediaMime).then((path) => {
+          cacheMedia(message.mediaUrl, message.mediaMime).then(async (path) => {
             if (path) {
               // Update message with local path after caching completes
-              executeStatement(
-                'UPDATE messages SET localMediaPath = ? WHERE id = ?',
-                [path, message.id]
-              ).catch((error) => {
+              try {
+                await executeStatement(
+                  'UPDATE messages SET localMediaPath = ? WHERE id = ?',
+                  [path, message.id]
+                );
+              } catch (error) {
                 console.error('❌ Failed to update localMediaPath:', error);
-              });
+              }
             }
           }).catch((error) => {
             console.error('❌ Failed to cache media in background:', error);
@@ -541,14 +579,16 @@ export async function syncMessageToSQLite(message: Message): Promise<void> {
     const upsertSql = `
       INSERT INTO messages (
         id, chatId, senderId, text, mediaUrl, mediaMime, localMediaPath, replyToId,
-        status, createdAt, edited, editedAt, syncedToFirestore
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        status, deliveredTo, readBy, createdAt, edited, editedAt, syncedToFirestore
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
       ON CONFLICT(id) DO UPDATE SET
         text = excluded.text,
         mediaUrl = excluded.mediaUrl,
         mediaMime = excluded.mediaMime,
         localMediaPath = COALESCE(excluded.localMediaPath, messages.localMediaPath),
         status = excluded.status,
+        deliveredTo = excluded.deliveredTo,
+        readBy = excluded.readBy,
         edited = excluded.edited,
         editedAt = excluded.editedAt,
         syncedToFirestore = 1
@@ -564,6 +604,8 @@ export async function syncMessageToSQLite(message: Message): Promise<void> {
       localMediaPath,
       message.replyToId || null,
       message.status,
+      JSON.stringify(message.deliveredTo || []),
+      JSON.stringify(message.readBy || []),
       message.createdAt,
       message.edited ? 1 : 0,
       message.editedAt || null,

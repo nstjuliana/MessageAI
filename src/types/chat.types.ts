@@ -37,6 +37,8 @@ export interface Message {
   localMediaPath?: string; // Local path to cached media file
   replyToId?: string; // ID of message being replied to
   status: MessageStatus;
+  deliveredTo?: string[]; // Array of user IDs who have received the message
+  readBy?: string[]; // Array of user IDs who have read the message
   reactions?: { [emoji: string]: string[] }; // emoji -> array of user IDs
   createdAt: number; // Unix timestamp
   edited: boolean;

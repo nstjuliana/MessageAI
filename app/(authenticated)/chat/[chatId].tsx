@@ -19,7 +19,7 @@ import {
   View
 } from 'react-native';
 
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import GroupAvatar from '@/components/GroupAvatar';
 import { useActivity } from '@/contexts/ActivityContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/contexts/NotificationContext';
@@ -58,6 +58,15 @@ const MessageItem = React.memo(({
   currentStatus: MessageStatus;
   isGroupChat: boolean;
 }) => {
+  // System messages (group events)
+  if (message.senderId === 'system') {
+    return (
+      <View style={styles.systemMessageContainer}>
+        <Text style={styles.systemMessageText}>{message.text}</Text>
+      </View>
+    );
+  }
+  
   return (
     <View style={[styles.messageContainer, isSent ? styles.sentContainer : styles.receivedContainer]}>
       {/* Avatar for received messages in groups */}
@@ -247,19 +256,31 @@ export default function ChatScreen() {
         // Global listeners handle SQLite syncing for all chats
         // These listeners provide instant UI feedback for the active chat
         const lastSynced = await getLastSyncedTimestamp(chatId);
+        console.log(`🕐 Setting up listeners for chat ${chatId} with lastSyncedTimestamp:`, new Date(lastSynced).toISOString());
         
         const unsubscribeNewMessages = onNewMessagesSnapshot(chatId, lastSynced, async (message) => {
-          console.log(`✅ [Local] New message: ${message.id}`);
+          console.log(`✅ [Local] New message received in listener:`, {
+            id: message.id,
+            text: message.text?.substring(0, 20) || '',
+            senderId: message.senderId,
+            chatId: message.chatId,
+            timestamp: new Date(message.createdAt).toISOString()
+          });
           
           // Add to UI immediately
           setMessages(prev => {
             const exists = prev.some(m => m.id === message.id);
-            if (exists) return prev;
+            if (exists) {
+              console.log(`⚠️ Message ${message.id} already exists in UI, skipping`);
+              return prev;
+            }
+            console.log(`➕ Adding new message ${message.id} to UI`);
             return [...prev, message].sort((a, b) => a.createdAt - b.createdAt);
           });
           
           // Mark as read if from someone else (chat is open)
           if (message.senderId !== user.uid) {
+            console.log(`📖 Marking message ${message.id} as read`);
             await markMessageAsRead(chatId, message.id, user.uid, message.senderId);
           }
         });
@@ -497,11 +518,42 @@ export default function ChatScreen() {
     }
   };
 
+  // Calculate actual display status based on all participants (for group chats)
+  const getDisplayStatus = useCallback((message: Message): MessageStatus => {
+    // For sent messages (own messages), calculate based on ALL participants
+    if (message.senderId === user?.uid && chat) {
+      // Get all other participants (excluding sender)
+      const otherParticipants = chat.participantIds.filter(id => id !== user.uid);
+      
+      // If no other participants, just return message status
+      if (otherParticipants.length === 0) return message.status;
+      
+      // Check if ALL participants have read it
+      const allRead = otherParticipants.every(id => message.readBy?.includes(id));
+      if (allRead) return 'read';
+      
+      // Check if ALL participants have received it
+      const allDelivered = otherParticipants.every(id => message.deliveredTo?.includes(id));
+      if (allDelivered) return 'delivered';
+      
+      // Otherwise, show the message's base status
+      return message.status;
+    }
+    
+    // For received messages, show base status
+    return message.status;
+  }, [user?.uid, chat]);
+
   // Memoized render function for better performance
   const renderMessage = useCallback(({ item }: { item: Message }) => {
     const isSent = item.senderId === user?.uid;
     const sender = participants[item.senderId];
-    const currentStatus = messageStatuses[item.id] || item.status;
+    
+    // Calculate display status (considers all participants for group chats)
+    const displayStatus = getDisplayStatus(item);
+    
+    // Use messageStatuses override if available, otherwise use calculated status
+    const currentStatus = messageStatuses[item.id] || displayStatus;
     
     return (
       <MessageItem 
@@ -512,7 +564,7 @@ export default function ChatScreen() {
         isGroupChat={chat?.type === 'group'}
       />
     );
-  }, [user?.uid, participants, messageStatuses, chat?.type]);
+  }, [user?.uid, participants, messageStatuses, chat, getDisplayStatus]);
   
   const getStatusIndicator = (status: MessageStatus): string => {
     switch (status) {
@@ -537,10 +589,12 @@ export default function ChatScreen() {
   };
 
   const renderEmptyState = () => (
-    <View style={[styles.emptyState, { transform: [{ scaleY: -1 }] }]}>
-      <Text style={styles.emptyEmoji}>💬</Text>
-      <Text style={styles.emptyTitle}>No messages yet</Text>
-      <Text style={styles.emptyText}>Send a message to start the conversation</Text>
+    <View style={{ transform: [{ scaleY: -1 }] }}>
+      <View style={styles.emptyState}>
+        <Text style={styles.emptyEmoji}>💬</Text>
+        <Text style={styles.emptyTitle}>No messages yet</Text>
+        <Text style={styles.emptyText}>Send a message to start the conversation</Text>
+      </View>
     </View>
   );
 
@@ -622,23 +676,30 @@ export default function ChatScreen() {
               <Text style={styles.headerName}>{getChatTitle()}</Text>
             </View>
           ) : (
-            // Group: Show group name with participant count
-            <View style={styles.headerTextContainer}>
-              <Text style={styles.headerTitle}>{getChatTitle()}</Text>
-              <Text style={styles.headerSubtitle}>
-                {chat?.participantIds.length || 0} participants
-              </Text>
+            // Group: Show group avatar with name
+            <View style={styles.headerAvatarContainer}>
+              <GroupAvatar
+                groupName={chat?.groupName}
+                avatarUrl={chat?.groupAvatarUrl}
+                groupId={chat?.id || ''}
+                size={40}
+              />
+              <View style={styles.headerTextContainer}>
+                <Text style={styles.headerTitle}>{getChatTitle()}</Text>
+                <Text style={styles.headerSubtitle}>
+                  {chat?.participantIds.length || 0} participants
+                </Text>
+              </View>
             </View>
           )}
         </View>
         <TouchableOpacity
           onPress={() => {
-            // TODO: Open chat settings
-            console.log('Chat settings tapped');
+            router.push(`/chat-settings/${chatId}` as any);
           }}
           style={styles.settingsButton}
         >
-          <IconSymbol name="gearshape.fill" size={32} color="#007AFF" />
+          <Text style={styles.settingsIcon}>⚙️</Text>
         </TouchableOpacity>
       </View>
       </Screen.Header>
@@ -831,6 +892,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'center',
   },
+  settingsIcon: {
+    fontSize: 24,
+  },
   messageList: {
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -873,6 +937,17 @@ const styles = StyleSheet.create({
   },
   receivedContainer: {
     justifyContent: 'flex-start',
+  },
+  systemMessageContainer: {
+    alignItems: 'center',
+    marginVertical: 12,
+    paddingHorizontal: 16,
+  },
+  systemMessageText: {
+    fontSize: 13,
+    color: '#8E8E93',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   avatar: {
     width: 32,

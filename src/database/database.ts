@@ -47,7 +47,11 @@ export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
         console.error('Migration failed, attempting to rebuild database:', migrationError);
         // If migration fails, drop and recreate (development fallback)
         await db.closeAsync();
-        await SQLite.deleteDatabaseAsync(DATABASE_NAME);
+        try {
+          await SQLite.deleteDatabaseAsync(DATABASE_NAME);
+        } catch (deleteError) {
+          console.log('Database file not found, continuing with fresh creation');
+        }
         db = await SQLite.openDatabaseAsync(DATABASE_NAME);
         await createTables();
         await setDatabaseVersion(DATABASE_VERSION);
@@ -404,6 +408,37 @@ async function migrateDatabase(fromVersion: number, toVersion: number): Promise<
       console.log('✅ Version 8 migration completed');
     }
     
+    // Version 9 migrations - Add deliveredTo and readBy columns for group status tracking
+    if (fromVersion < 9 && toVersion >= 9) {
+      console.log('Migrating to version 9: Adding deliveredTo and readBy columns to messages');
+      
+      // Add deliveredTo column
+      try {
+        await db.execAsync('ALTER TABLE messages ADD COLUMN deliveredTo TEXT');
+        console.log('✅ Added deliveredTo column to messages table');
+      } catch (error: any) {
+        if (error.message?.includes('duplicate column name')) {
+          console.log('✅ deliveredTo column already exists');
+        } else {
+          console.error('⚠️ Could not add deliveredTo column:', error.message);
+        }
+      }
+      
+      // Add readBy column
+      try {
+        await db.execAsync('ALTER TABLE messages ADD COLUMN readBy TEXT');
+        console.log('✅ Added readBy column to messages table');
+      } catch (error: any) {
+        if (error.message?.includes('duplicate column name')) {
+          console.log('✅ readBy column already exists');
+        } else {
+          console.error('⚠️ Could not add readBy column:', error.message);
+        }
+      }
+      
+      console.log('✅ Version 9 migration completed');
+    }
+    
     console.log('Migration completed successfully');
   } catch (error) {
     console.error('Migration failed:', error);
@@ -471,9 +506,18 @@ export async function rebuildDatabase(): Promise<void> {
       db = null;
     }
     
-    // Delete database file
-    await SQLite.deleteDatabaseAsync(DATABASE_NAME);
-    console.log('✅ Old database deleted');
+    // Delete database file (if it exists)
+    try {
+      await SQLite.deleteDatabaseAsync(DATABASE_NAME);
+      console.log('✅ Old database deleted');
+    } catch (deleteError: any) {
+      // Database might not exist on first load - this is fine
+      if (deleteError.message?.includes('not found')) {
+        console.log('ℹ️ No existing database to delete');
+      } else {
+        console.warn('⚠️ Could not delete database:', deleteError);
+      }
+    }
     
     // Reinitialize with new schema
     await initDatabase();

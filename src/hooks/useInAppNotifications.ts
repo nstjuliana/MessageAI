@@ -99,18 +99,25 @@ export function useInAppNotifications() {
 
             console.log('✅ Sender profile fetched:', senderProfile.displayName);
 
+            // Build notification title (with group context if applicable)
+            let notificationTitle = senderProfile.displayName;
+            if (chat.type === 'group' && chat.groupName) {
+              notificationTitle = `${senderProfile.displayName} in ${chat.groupName}`;
+            }
+
             // Show notification
             console.log('🎯 showNotification called with:', {
               chatId,
               senderId,
-              senderName: senderProfile.displayName,
+              senderName: notificationTitle,
               messageText: chat.lastMessageText,
+              chatType: chat.type,
             });
 
             showNotification({
               chatId,
               senderId,
-              senderName: senderProfile.displayName,
+              senderName: notificationTitle,
               senderAvatarUrl: senderProfile.avatarUrl,
               messageText: chat.lastMessageText || 'New message',
             });

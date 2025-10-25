@@ -23,6 +23,8 @@ export const CREATE_MESSAGES_TABLE = `
     localMediaPath TEXT,
     replyToId TEXT,
     status TEXT NOT NULL CHECK(status IN ('sending', 'sent', 'delivered', 'read', 'failed')),
+    deliveredTo TEXT,
+    readBy TEXT,
     createdAt INTEGER NOT NULL,
     edited INTEGER DEFAULT 0,
     editedAt INTEGER,
@@ -225,7 +227,7 @@ export const ALL_TABLES = [
  * Database version
  * Increment this when schema changes to trigger migrations
  */
-export const DATABASE_VERSION = 8;
+export const DATABASE_VERSION = 9;
 
 /**
  * Database name

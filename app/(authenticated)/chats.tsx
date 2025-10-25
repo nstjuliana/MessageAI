@@ -26,6 +26,7 @@ import { onUserPresenceChange, onUsersPresenceChange } from '@/services/presence
 import { onUsersProfilesSnapshot } from '@/services/user.service';
 import type { Chat } from '@/types/chat.types';
 import type { PublicUserProfile, User, UserPresence } from '@/types/user.types';
+import GroupAvatar from '../../components/GroupAvatar';
 import Screen from '../../components/Screen';
 
 export default function ChatsScreen() {
@@ -280,23 +281,32 @@ export default function ChatsScreen() {
       >
         {/* Avatar with presence indicator */}
         <View style={styles.avatarContainer}>
-          <View style={styles.avatar}>
-            {avatarLocalPath ? (
-              <Image 
-                source={{ uri: avatarLocalPath }} 
-                style={styles.avatarImage} 
-              />
-            ) : avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-            ) : (
-              <Text style={styles.avatarText}>
-                {title.charAt(0).toUpperCase()}
-              </Text>
-            )}
-          </View>
-          {/* Show presence dot for DM chats only */}
-          {item.type === 'dm' && (
-            <View style={[styles.presenceDot, { backgroundColor: getPresenceColor(presence) }]} />
+          {item.type === 'group' ? (
+            <GroupAvatar
+              groupName={item.groupName}
+              avatarUrl={item.groupAvatarUrl}
+              groupId={item.id}
+              size={56}
+            />
+          ) : (
+            <>
+              <View style={styles.avatar}>
+                {avatarLocalPath ? (
+                  <Image 
+                    source={{ uri: avatarLocalPath }} 
+                    style={styles.avatarImage} 
+                  />
+                ) : avatarUrl ? (
+                  <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.avatarText}>
+                    {title.charAt(0).toUpperCase()}
+                  </Text>
+                )}
+              </View>
+              {/* Show presence dot for DM chats only */}
+              <View style={[styles.presenceDot, { backgroundColor: getPresenceColor(presence) }]} />
+            </>
           )}
         </View>
 

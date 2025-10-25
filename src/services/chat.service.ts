@@ -20,7 +20,7 @@ import {
   where,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { syncMessageToSQLite } from './message.service';
+import { createSystemMessage, syncMessageToSQLite } from './message.service';
 
 const CHATS_COLLECTION = 'chats';
 const MESSAGES_COLLECTION = 'messages';
@@ -636,6 +636,439 @@ export async function getChatById(chatId: string): Promise<Chat | null> {
 }
 
 /**
+ * Generate group name from participant IDs
+ * @param participantIds - Array of user IDs
+ * @returns Auto-generated group name
+ */
+async function generateGroupName(participantIds: string[]): Promise<string> {
+  try {
+    // Fetch profiles for all participants
+    const profiles: Record<string, any> = {};
+    
+    for (const userId of participantIds) {
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      if (userDoc.exists()) {
+        profiles[userId] = userDoc.data();
+      }
+    }
+    
+    // Get display names
+    const names = participantIds
+      .map(id => profiles[id]?.displayName || 'Unknown')
+      .slice(0, 3); // Take first 3
+    
+    // Build name
+    let groupName = names.join(', ');
+    
+    // Add "+N more" if there are more participants
+    if (participantIds.length > 3) {
+      groupName += ` +${participantIds.length - 3} more`;
+    }
+    
+    return groupName;
+  } catch (error) {
+    console.error('❌ Error generating group name:', error);
+    return 'Group Chat';
+  }
+}
+
+/**
+ * Convert DM to group (changes type, adds participants)
+ * @param chatId - Existing DM chat ID
+ * @param newParticipantIds - Array of new participant user IDs to add
+ * @param groupName - Optional group name (auto-generated if not provided)
+ * @returns Updated chat object
+ */
+export async function convertDMToGroup(
+  chatId: string,
+  newParticipantIds: string[],
+  groupName?: string
+): Promise<Chat> {
+  try {
+    console.log(`🔄 Converting DM ${chatId} to group...`);
+    
+    // Get existing chat
+    const chat = await getChatById(chatId);
+    if (!chat) {
+      throw new Error('Chat not found');
+    }
+    
+    if (chat.type === 'group') {
+      throw new Error('Chat is already a group');
+    }
+    
+    // Merge participant IDs (existing + new)
+    const allParticipantIds = [...new Set([...chat.participantIds, ...newParticipantIds])];
+    
+    // Generate group name if not provided
+    const finalGroupName = groupName || await generateGroupName(allParticipantIds);
+    
+    // Set first participant as admin
+    const adminIds = [chat.participantIds[0]];
+    
+    // Update Firestore
+    const chatRef = doc(db, CHATS_COLLECTION, chatId);
+    await updateDoc(chatRef, {
+      type: 'group',
+      participantIds: allParticipantIds,
+      adminIds,
+      groupName: finalGroupName,
+      updatedAt: serverTimestamp(),
+    });
+    
+    console.log(`✅ Converted to group with ${allParticipantIds.length} participants`);
+    
+    // Return updated chat
+    const updatedChat: Chat = {
+      ...chat,
+      type: 'group',
+      participantIds: allParticipantIds,
+      adminIds,
+      groupName: finalGroupName,
+      updatedAt: Date.now(),
+    };
+    
+    // Update SQLite
+    await syncChatToSQLite(updatedChat);
+    
+    // Create system message
+    try {
+      const addedNames = await Promise.all(
+        newParticipantIds.map(async id => {
+          const userDoc = await getDoc(doc(db, 'users', id));
+          return userDoc.exists() ? userDoc.data().displayName : 'Someone';
+        })
+      );
+      await createSystemMessage(
+        chatId,
+        `Converted to group chat. Added ${addedNames.join(', ')}`
+      );
+    } catch (err) {
+      console.error('Failed to create system message:', err);
+    }
+    
+    return updatedChat;
+  } catch (error) {
+    console.error('❌ Error converting DM to group:', error);
+    throw error;
+  }
+}
+
+/**
+ * Create new group chat
+ * @param creatorId - User ID of group creator (becomes first admin)
+ * @param participantIds - Array of all participant user IDs (including creator)
+ * @param groupName - Optional group name (auto-generated if not provided)
+ * @returns Created chat object
+ */
+export async function createGroupChat(
+  creatorId: string,
+  participantIds: string[],
+  groupName?: string
+): Promise<Chat> {
+  try {
+    console.log(`📝 Creating group chat with ${participantIds.length} participants...`);
+    
+    // Ensure creator is in participants
+    const allParticipantIds = [...new Set([creatorId, ...participantIds])];
+    
+    // Generate group name if not provided
+    const finalGroupName = groupName || await generateGroupName(allParticipantIds);
+    
+    // Creator becomes first admin
+    const adminIds = [creatorId];
+    
+    // Create group chat
+    const chat = await createChat({
+      type: 'group',
+      participantIds: allParticipantIds,
+      adminIds,
+      groupName: finalGroupName,
+    });
+    
+    console.log(`✅ Group chat created: ${chat.id}`);
+    
+    return chat;
+  } catch (error) {
+    console.error('❌ Error creating group chat:', error);
+    throw error;
+  }
+}
+
+/**
+ * Add participants to existing group
+ * @param chatId - Group chat ID
+ * @param newParticipantIds - Array of user IDs to add
+ */
+export async function addParticipantsToGroup(
+  chatId: string,
+  newParticipantIds: string[]
+): Promise<void> {
+  try {
+    console.log(`➕ Adding ${newParticipantIds.length} participants to group ${chatId}...`);
+    
+    // Get existing chat
+    const chat = await getChatById(chatId);
+    if (!chat) {
+      throw new Error('Chat not found');
+    }
+    
+    if (chat.type !== 'group') {
+      throw new Error('Chat is not a group');
+    }
+    
+    // Merge participant IDs
+    const allParticipantIds = [...new Set([...chat.participantIds, ...newParticipantIds])];
+    
+    // Update Firestore
+    const chatRef = doc(db, CHATS_COLLECTION, chatId);
+    await updateDoc(chatRef, {
+      participantIds: allParticipantIds,
+      updatedAt: serverTimestamp(),
+    });
+    
+    // Update SQLite
+    await syncChatToSQLite({
+      ...chat,
+      participantIds: allParticipantIds,
+      updatedAt: Date.now(),
+    });
+    
+    // Create system message
+    try {
+      const addedNames = await Promise.all(
+        newParticipantIds.map(async id => {
+          const userDoc = await getDoc(doc(db, 'users', id));
+          return userDoc.exists() ? userDoc.data().displayName : 'Someone';
+        })
+      );
+      await createSystemMessage(
+        chatId,
+        `Added ${addedNames.join(', ')} to the group`
+      );
+    } catch (err) {
+      console.error('Failed to create system message:', err);
+    }
+    
+    console.log(`✅ Added participants to group`);
+  } catch (error) {
+    console.error('❌ Error adding participants to group:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update group metadata (name, avatar)
+ * @param chatId - Group chat ID
+ * @param updates - Updates to apply
+ */
+export async function updateGroupInfo(
+  chatId: string,
+  updates: { groupName?: string; groupAvatarUrl?: string }
+): Promise<void> {
+  try {
+    console.log(`✏️ Updating group info for ${chatId}...`);
+    
+    // Get existing chat
+    const chat = await getChatById(chatId);
+    if (!chat) {
+      throw new Error('Chat not found');
+    }
+    
+    if (chat.type !== 'group') {
+      throw new Error('Chat is not a group');
+    }
+    
+    // Build update object
+    const updateData: any = {
+      updatedAt: serverTimestamp(),
+    };
+    
+    if (updates.groupName !== undefined) {
+      updateData.groupName = updates.groupName;
+    }
+    if (updates.groupAvatarUrl !== undefined) {
+      updateData.groupAvatarUrl = updates.groupAvatarUrl;
+    }
+    
+    // Update Firestore
+    const chatRef = doc(db, CHATS_COLLECTION, chatId);
+    await updateDoc(chatRef, updateData);
+    
+    // Update SQLite
+    await syncChatToSQLite({
+      ...chat,
+      ...updates,
+      updatedAt: Date.now(),
+    });
+    
+    // Create system message for name change
+    if (updates.groupName && updates.groupName !== chat.groupName) {
+      try {
+        await createSystemMessage(
+          chatId,
+          `Group name changed to "${updates.groupName}"`
+        );
+      } catch (err) {
+        console.error('Failed to create system message:', err);
+      }
+    }
+    
+    console.log(`✅ Updated group info`);
+  } catch (error) {
+    console.error('❌ Error updating group info:', error);
+    throw error;
+  }
+}
+
+/**
+ * Remove participant from group (admin only)
+ * @param chatId - Group chat ID
+ * @param participantId - User ID to remove
+ * @param removedBy - User ID performing the removal (must be admin)
+ */
+export async function removeParticipantFromGroup(
+  chatId: string,
+  participantId: string,
+  removedBy: string
+): Promise<void> {
+  try {
+    console.log(`➖ Removing participant ${participantId} from group ${chatId}...`);
+    
+    // Get existing chat
+    const chat = await getChatById(chatId);
+    if (!chat) {
+      throw new Error('Chat not found');
+    }
+    
+    if (chat.type !== 'group') {
+      throw new Error('Chat is not a group');
+    }
+    
+    // Check if remover is admin
+    if (!chat.adminIds?.includes(removedBy)) {
+      throw new Error('Only admins can remove participants');
+    }
+    
+    // Remove participant
+    const newParticipantIds = chat.participantIds.filter(id => id !== participantId);
+    
+    // Also remove from admins if they were an admin
+    const newAdminIds = chat.adminIds?.filter(id => id !== participantId) || [];
+    
+    // Update Firestore
+    const chatRef = doc(db, CHATS_COLLECTION, chatId);
+    await updateDoc(chatRef, {
+      participantIds: newParticipantIds,
+      adminIds: newAdminIds,
+      updatedAt: serverTimestamp(),
+    });
+    
+    // Update SQLite
+    await syncChatToSQLite({
+      ...chat,
+      participantIds: newParticipantIds,
+      adminIds: newAdminIds,
+      updatedAt: Date.now(),
+    });
+    
+    // Create system message
+    try {
+      const removedUserDoc = await getDoc(doc(db, 'users', participantId));
+      const removedUserName = removedUserDoc.exists()
+        ? removedUserDoc.data().displayName
+        : 'Someone';
+      
+      const removerUserDoc = await getDoc(doc(db, 'users', removedBy));
+      const removerUserName = removerUserDoc.exists()
+        ? removerUserDoc.data().displayName
+        : 'Someone';
+      
+      await createSystemMessage(
+        chatId,
+        `${removerUserName} removed ${removedUserName} from the group`
+      );
+    } catch (err) {
+      console.error('Failed to create system message:', err);
+    }
+    
+    console.log(`✅ Removed participant from group`);
+  } catch (error) {
+    console.error('❌ Error removing participant from group:', error);
+    throw error;
+  }
+}
+
+/**
+ * Leave group
+ * @param chatId - Group chat ID
+ * @param userId - User ID leaving the group
+ */
+export async function leaveGroup(
+  chatId: string,
+  userId: string
+): Promise<void> {
+  try {
+    console.log(`👋 User ${userId} leaving group ${chatId}...`);
+    
+    // Get existing chat
+    const chat = await getChatById(chatId);
+    if (!chat) {
+      throw new Error('Chat not found');
+    }
+    
+    if (chat.type !== 'group') {
+      throw new Error('Chat is not a group');
+    }
+    
+    // Remove user from participants
+    const newParticipantIds = chat.participantIds.filter(id => id !== userId);
+    
+    // Also remove from admins if they were an admin
+    const newAdminIds = chat.adminIds?.filter(id => id !== userId) || [];
+    
+    // Check if group will be empty
+    if (newParticipantIds.length === 0) {
+      console.log('⚠️ Last participant leaving - group will be empty');
+    }
+    
+    // Update Firestore
+    const chatRef = doc(db, CHATS_COLLECTION, chatId);
+    await updateDoc(chatRef, {
+      participantIds: newParticipantIds,
+      adminIds: newAdminIds,
+      updatedAt: serverTimestamp(),
+    });
+    
+    // Update SQLite
+    await syncChatToSQLite({
+      ...chat,
+      participantIds: newParticipantIds,
+      adminIds: newAdminIds,
+      updatedAt: Date.now(),
+    });
+    
+    // Create system message
+    try {
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      const userName = userDoc.exists() ? userDoc.data().displayName : 'Someone';
+      
+      await createSystemMessage(
+        chatId,
+        `${userName} left the group`
+      );
+    } catch (err) {
+      console.error('Failed to create system message:', err);
+    }
+    
+    console.log(`✅ Left group`);
+  } catch (error) {
+    console.error('❌ Error leaving group:', error);
+    throw error;
+  }
+}
+
+/**
  * Listen for NEW messages only (created after lastSyncedTimestamp)
  * @param chatId - Chat ID
  * @param lastSyncedTimestamp - Only fetch messages newer than this
@@ -661,20 +1094,20 @@ export function onNewMessagesSnapshot(
         snapshot.docChanges().forEach(change => {
           if (change.type === 'added') {
             const doc = change.doc;
-            const data = doc.data();
+          const data = doc.data();
             const message: Message = {
-              id: doc.id,
-              chatId,
-              senderId: data.senderId,
-              text: data.text || '',
-              mediaUrl: data.mediaUrl,
-              mediaMime: data.mediaMime,
-              replyToId: data.replyToId,
-              status: data.status || 'sent',
-              edited: data.edited || false,
-              editedAt: data.editedAt?.toMillis?.() || data.editedAt,
-              createdAt: data.createdAt?.toMillis?.() || data.createdAt || Date.now(),
-            };
+            id: doc.id,
+            chatId,
+            senderId: data.senderId,
+            text: data.text || '',
+            mediaUrl: data.mediaUrl,
+            mediaMime: data.mediaMime,
+            replyToId: data.replyToId,
+            status: data.status || 'sent',
+            edited: data.edited || false,
+            editedAt: data.editedAt?.toMillis?.() || data.editedAt,
+            createdAt: data.createdAt?.toMillis?.() || data.createdAt || Date.now(),
+          };
             console.log(`📩 New message: ${message.id}`);
             callback(message);
           }

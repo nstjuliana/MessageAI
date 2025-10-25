@@ -29,6 +29,8 @@ export default function NewChatScreen() {
   const [presenceData, setPresenceData] = useState<Record<string, { status: UserPresence; lastSeen: number }>>({});
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedUsers, setSelectedUsers] = useState<PublicUserProfile[]>([]);
 
   const handleSearch = async (term: string) => {
     setSearchTerm(term);
@@ -90,6 +92,18 @@ export default function NewChatScreen() {
   const handleSelectUser = async (selectedUser: PublicUserProfile) => {
     if (!user) return;
 
+    // In selection mode, toggle user selection
+    if (selectionMode) {
+      const isSelected = selectedUsers.some(u => u.id === selectedUser.id);
+      if (isSelected) {
+        setSelectedUsers(selectedUsers.filter(u => u.id !== selectedUser.id));
+      } else {
+        setSelectedUsers([...selectedUsers, selectedUser]);
+      }
+      return;
+    }
+
+    // Regular mode - create DM
     setCreating(true);
     try {
       console.log(`Creating/finding chat with ${selectedUser.displayName}...`);
@@ -109,6 +123,26 @@ export default function NewChatScreen() {
     }
   };
 
+  const toggleSelectionMode = () => {
+    setSelectionMode(!selectionMode);
+    setSelectedUsers([]); // Clear selection when toggling
+  };
+
+  const handleNext = () => {
+    if (selectedUsers.length < 2) {
+      alert('Please select at least 2 people for a group');
+      return;
+    }
+    
+    // Navigate to group creation screen with selected users
+    router.push({
+      pathname: '/new-group' as any,
+      params: {
+        userIds: JSON.stringify(selectedUsers.map(u => u.id)),
+      },
+    });
+  };
+
   const renderUserItem = ({ item }: { item: PublicUserProfile }) => {
     // Get presence from RTDB (not stale Firestore data)
     const presence = presenceData[item.id]?.status || 'offline';
@@ -122,6 +156,8 @@ export default function NewChatScreen() {
     // Get latest profile data (including avatarUrl) from real-time listener
     const profile = profileData[item.id];
     const avatarUrl = profile?.avatarUrl || item.avatarUrl;
+    
+    const isSelected = selectedUsers.some(u => u.id === item.id);
 
     return (
       <TouchableOpacity
@@ -129,6 +165,13 @@ export default function NewChatScreen() {
         onPress={() => handleSelectUser(item)}
         disabled={creating}
       >
+        {/* Checkbox in selection mode */}
+        {selectionMode && (
+          <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+            {isSelected && <Text style={styles.checkmark}>✓</Text>}
+          </View>
+        )}
+        
         {/* Avatar with presence indicator */}
         <View style={styles.avatarWrapper}>
           <View style={styles.avatar}>
@@ -155,8 +198,8 @@ export default function NewChatScreen() {
           )}
         </View>
 
-        {/* Chevron */}
-        <Text style={styles.chevron}>›</Text>
+        {/* Chevron (only in regular mode) */}
+        {!selectionMode && <Text style={styles.chevron}>›</Text>}
       </TouchableOpacity>
     );
   };
@@ -199,8 +242,14 @@ export default function NewChatScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Text style={styles.backText}>‹ Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>New Chat</Text>
-        <View style={styles.placeholder} />
+        <Text style={styles.headerTitle}>
+          {selectionMode ? `Selected (${selectedUsers.length})` : 'New Chat'}
+        </Text>
+        <TouchableOpacity onPress={toggleSelectionMode} style={styles.headerButton}>
+          <Text style={styles.headerButtonText}>
+            {selectionMode ? 'Cancel' : 'New Group'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Search input */}
@@ -227,6 +276,20 @@ export default function NewChatScreen() {
         }
         ListEmptyComponent={renderEmptyState}
       />
+
+      {/* Next button (in selection mode with users selected) */}
+      {selectionMode && selectedUsers.length >= 2 && (
+        <View style={styles.nextButtonContainer}>
+          <TouchableOpacity
+            style={styles.nextButton}
+            onPress={handleNext}
+          >
+            <Text style={styles.nextButtonText}>
+              Next ({selectedUsers.length} selected)
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Creating chat overlay */}
       {creating && (
@@ -269,8 +332,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#000',
   },
-  placeholder: {
-    width: 40,
+  headerButton: {
+    padding: 8,
+  },
+  headerButtonText: {
+    fontSize: 16,
+    color: '#007AFF',
+    fontWeight: '500',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -392,6 +460,41 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: '#000',
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#007AFF',
+    marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxSelected: {
+    backgroundColor: '#007AFF',
+  },
+  checkmark: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  nextButtonContainer: {
+    padding: 16,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+  },
+  nextButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  nextButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
   },
 });
 
