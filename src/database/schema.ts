@@ -29,6 +29,11 @@ export const CREATE_MESSAGES_TABLE = `
     edited INTEGER DEFAULT 0,
     editedAt INTEGER,
     
+    -- AI Translation fields
+    translatedText TEXT,
+    translatedLanguage TEXT,
+    translatedAt INTEGER,
+    
     -- Offline queue fields
     localId TEXT UNIQUE,
     queuedAt INTEGER,
@@ -47,6 +52,7 @@ export const CREATE_MESSAGES_INDEXES = `
   CREATE INDEX IF NOT EXISTS idx_messages_status ON messages(status);
   CREATE INDEX IF NOT EXISTS idx_messages_queue ON messages(queuedAt) WHERE queuedAt IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_messages_synced ON messages(syncedToFirestore);
+  CREATE INDEX IF NOT EXISTS idx_messages_translatedAt ON messages(translatedAt);
 `;
 
 /**
@@ -227,7 +233,7 @@ export const ALL_TABLES = [
  * Database version
  * Increment this when schema changes to trigger migrations
  */
-export const DATABASE_VERSION = 9;
+export const DATABASE_VERSION = 10;
 
 /**
  * Database name

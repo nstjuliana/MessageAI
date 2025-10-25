@@ -43,6 +43,9 @@ export interface Message {
   createdAt: number; // Unix timestamp
   edited: boolean;
   editedAt?: number; // Unix timestamp
+  translatedText?: string; // AI-translated text
+  translatedLanguage?: string; // Target language of translation (e.g., 'en')
+  translatedAt?: number; // Unix timestamp of when translation was created
 }
 
 /**

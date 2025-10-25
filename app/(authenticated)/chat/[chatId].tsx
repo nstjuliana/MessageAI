@@ -7,6 +7,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -35,8 +36,10 @@ import {
   getMessagesFromSQLite,
   markAllMessagesAsRead,
   markMessageAsRead,
+  saveMessageTranslation,
   sendMessageOptimistic
 } from '@/services/message.service';
+import { translateMessage } from '@/services/openai.service';
 import { onUsersPresenceChange } from '@/services/presence.service';
 import { onTypingStatusChange } from '@/services/typing-rtdb.service';
 import { onUsersProfilesSnapshot } from '@/services/user.service';
@@ -51,12 +54,18 @@ const MessageItem = React.memo(({
   sender, 
   currentStatus,
   isGroupChat,
+  onLongPress,
+  onToggleTranslation,
+  showingTranslation,
 }: { 
   message: Message; 
   isSent: boolean; 
   sender?: PublicUserProfile;
   currentStatus: MessageStatus;
   isGroupChat: boolean;
+  onLongPress: (message: Message) => void;
+  onToggleTranslation: (messageId: string) => void;
+  showingTranslation: boolean;
 }) => {
   // System messages (group events)
   if (message.senderId === 'system') {
@@ -66,6 +75,9 @@ const MessageItem = React.memo(({
       </View>
     );
   }
+  
+  const hasTranslation = !!message.translatedText;
+  const displayText = showingTranslation && message.translatedText ? message.translatedText : message.text;
   
   return (
     <View style={[styles.messageContainer, isSent ? styles.sentContainer : styles.receivedContainer]}>
@@ -95,40 +107,75 @@ const MessageItem = React.memo(({
           </Text>
         )}
 
-        {/* Message bubble */}
-        <View style={[styles.messageBubble, isSent ? styles.sentBubble : styles.receivedBubble]}>
-          <Text style={[styles.messageText, isSent ? styles.sentText : styles.receivedText]}>
-            {message.text}
-          </Text>
-          <View style={styles.messageFooter}>
-            <Text style={[styles.timestamp, isSent ? styles.sentTimestamp : styles.receivedTimestamp]}>
-              {new Date(message.createdAt).toLocaleTimeString([], { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-              })}
+        {/* Message bubble with long press support */}
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onLongPress={() => onLongPress(message)}
+          delayLongPress={500}
+        >
+          <View style={[styles.messageBubble, isSent ? styles.sentBubble : styles.receivedBubble]}>
+            <Text style={[styles.messageText, isSent ? styles.sentText : styles.receivedText]}>
+              {displayText}
             </Text>
-            {/* Status indicators for sent messages */}
-            {isSent && (
-              <View style={styles.statusContainer}>
-                {currentStatus === 'sending' && (
-                  <Text style={[styles.statusText, { color: '#999' }]}>⏱</Text>
-                )}
-                {currentStatus === 'sent' && (
-                  <Text style={[styles.statusText, { color: '#999' }]}>✓</Text>
-                )}
-                {currentStatus === 'delivered' && (
-                  <Text style={[styles.statusText, { color: '#999' }]}>✓✓</Text>
-                )}
-                {currentStatus === 'read' && (
-                  <Text style={[styles.statusText, { color: '#34C759' }]}>✓✓✓</Text>
-                )}
-                {currentStatus === 'failed' && (
-                  <Text style={[styles.statusText, { color: '#ff3b30' }]}>!</Text>
-                )}
+            <View style={styles.messageFooter}>
+              <Text style={[styles.timestamp, isSent ? styles.sentTimestamp : styles.receivedTimestamp]}>
+                {new Date(message.createdAt).toLocaleTimeString([], { 
+                  hour: '2-digit', 
+                  minute: '2-digit' 
+                })}
+              </Text>
+              
+              {/* Translation toggle icon */}
+              {hasTranslation && (
+                <TouchableOpacity 
+                  onPress={() => onToggleTranslation(message.id)}
+                  style={styles.translationToggle}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={[
+                    styles.translationIcon,
+                    isSent ? styles.sentTranslationIcon : styles.receivedTranslationIcon
+                  ]}>
+                    🌐
+                  </Text>
+                </TouchableOpacity>
+              )}
+              
+              {/* Status indicators for sent messages */}
+              {isSent && (
+                <View style={styles.statusContainer}>
+                  {currentStatus === 'sending' && (
+                    <Text style={[styles.statusText, { color: '#999' }]}>⏱</Text>
+                  )}
+                  {currentStatus === 'sent' && (
+                    <Text style={[styles.statusText, { color: '#999' }]}>✓</Text>
+                  )}
+                  {currentStatus === 'delivered' && (
+                    <Text style={[styles.statusText, { color: '#999' }]}>✓✓</Text>
+                  )}
+                  {currentStatus === 'read' && (
+                    <Text style={[styles.statusText, { color: '#34C759' }]}>✓✓✓</Text>
+                  )}
+                  {currentStatus === 'failed' && (
+                    <Text style={[styles.statusText, { color: '#ff3b30' }]}>!</Text>
+                  )}
+                </View>
+              )}
+            </View>
+            
+            {/* Translation indicator */}
+            {hasTranslation && showingTranslation && (
+              <View style={styles.translationIndicator}>
+                <Text style={[
+                  styles.translationIndicatorText,
+                  isSent ? styles.sentTranslationIndicatorText : styles.receivedTranslationIndicatorText
+                ]}>
+                  Translation
+                </Text>
               </View>
             )}
           </View>
-        </View>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -137,12 +184,14 @@ const MessageItem = React.memo(({
   return (
     prevProps.message.id === nextProps.message.id &&
     prevProps.message.text === nextProps.message.text &&
+    prevProps.message.translatedText === nextProps.message.translatedText &&
     prevProps.currentStatus === nextProps.currentStatus &&
     prevProps.isSent === nextProps.isSent &&
     prevProps.sender?.id === nextProps.sender?.id &&
     prevProps.sender?.avatarLocalPath === nextProps.sender?.avatarLocalPath &&
     prevProps.sender?.displayName === nextProps.sender?.displayName &&
-    prevProps.isGroupChat === nextProps.isGroupChat
+    prevProps.isGroupChat === nextProps.isGroupChat &&
+    prevProps.showingTranslation === nextProps.showingTranslation
   );
 });
 
@@ -176,6 +225,9 @@ export default function ChatScreen() {
   
   // Track if this is the first load to prevent animated scroll on open
   const isFirstLoadRef = useRef(true);
+  
+  // Track which messages are showing translations (messageId -> boolean)
+  const [showingTranslations, setShowingTranslations] = useState<Record<string, boolean>>({});
 
   // Register this chat as active (suppress notifications for this chat)
   useEffect(() => {
@@ -562,9 +614,12 @@ export default function ChatScreen() {
         sender={sender}
         currentStatus={currentStatus}
         isGroupChat={chat?.type === 'group'}
+        onLongPress={handleMessageLongPress}
+        onToggleTranslation={handleToggleTranslation}
+        showingTranslation={showingTranslations[item.id] || false}
       />
     );
-  }, [user?.uid, participants, messageStatuses, chat, getDisplayStatus]);
+  }, [user?.uid, participants, messageStatuses, chat, getDisplayStatus, showingTranslations]);
   
   const getStatusIndicator = (status: MessageStatus): string => {
     switch (status) {
@@ -615,6 +670,81 @@ export default function ChatScreen() {
       // Multiple users typing
       return `${typingUserIds.length} people are typing...`;
     }
+  };
+
+  // Handle long press on message to show translate option
+  const handleMessageLongPress = (message: Message) => {
+    if (!message.text || message.text.trim().length === 0) {
+      return; // Can't translate empty messages
+    }
+
+    // Only show translate option if not already translated
+    if (message.translatedText) {
+      Alert.alert(
+        'Translation',
+        'This message already has a translation. Tap the 🌐 icon to toggle between original and translated text.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Message Actions',
+      'What would you like to do?',
+      [
+        {
+          text: 'Translate to English',
+          onPress: () => handleTranslateMessage(message),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  // Handle message translation
+  const handleTranslateMessage = async (message: Message) => {
+    if (!message.text) return;
+
+    try {
+      console.log(`🌐 Translating message ${message.id}`);
+      
+      // Call OpenAI API to translate
+      const translatedText = await translateMessage(message.text, 'English');
+      
+      // Save translation to SQLite
+      await saveMessageTranslation(message.id, translatedText, 'en');
+      
+      // Update local state to reflect translation
+      setMessages(prev => prev.map(m => 
+        m.id === message.id 
+          ? { ...m, translatedText, translatedLanguage: 'en', translatedAt: Date.now() }
+          : m
+      ));
+      
+      // Automatically show the translation
+      setShowingTranslations(prev => ({ ...prev, [message.id]: true }));
+      
+      console.log('✅ Translation complete');
+    } catch (error) {
+      console.error('❌ Translation failed:', error);
+      
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Failed to translate message. Please try again.';
+      
+      Alert.alert('Translation Error', errorMessage, [{ text: 'OK' }]);
+    }
+  };
+
+  // Toggle between original and translated text
+  const handleToggleTranslation = (messageId: string) => {
+    setShowingTranslations(prev => ({
+      ...prev,
+      [messageId]: !prev[messageId],
+    }));
   };
 
   if (loading) {
@@ -1089,6 +1219,31 @@ const styles = StyleSheet.create({
   sendButtonText: {
     fontSize: 20,
     color: '#fff',
+  },
+  translationToggle: {
+    marginLeft: 6,
+  },
+  translationIcon: {
+    fontSize: 14,
+  },
+  sentTranslationIcon: {
+    opacity: 0.9,
+  },
+  receivedTranslationIcon: {
+    opacity: 0.7,
+  },
+  translationIndicator: {
+    marginTop: 4,
+  },
+  translationIndicatorText: {
+    fontSize: 10,
+    fontStyle: 'italic',
+  },
+  sentTranslationIndicatorText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  receivedTranslationIndicatorText: {
+    color: '#8E8E93',
   },
 });
 

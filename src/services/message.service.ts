@@ -489,7 +489,8 @@ export async function getMessagesFromSQLite(
     const sql = `
       SELECT 
         id, chatId, senderId, text, mediaUrl, mediaMime, localMediaPath,
-        replyToId, status, deliveredTo, readBy, createdAt, edited, editedAt
+        replyToId, status, deliveredTo, readBy, createdAt, edited, editedAt,
+        translatedText, translatedLanguage, translatedAt
       FROM messages
       WHERE chatId = ?
       ORDER BY createdAt DESC
@@ -514,6 +515,9 @@ export async function getMessagesFromSQLite(
       edited: row.edited === 1,
       editedAt: row.editedAt || undefined,
       createdAt: row.createdAt,
+      translatedText: row.translatedText || undefined,
+      translatedLanguage: row.translatedLanguage || undefined,
+      translatedAt: row.translatedAt || undefined,
     }));
     
     // Return in ascending order (oldest first)
@@ -534,8 +538,15 @@ export async function syncMessageToSQLite(message: Message): Promise<void> {
     const sqlite = getDatabase();
     
     // Check if message already exists and get its current status
-    const existingSql = 'SELECT id, status, localMediaPath FROM messages WHERE id = ?';
-    const existing = await sqlite.getFirstAsync<{ id: string; status: string; localMediaPath: string | null }>(
+    const existingSql = 'SELECT id, status, localMediaPath, translatedText, translatedLanguage, translatedAt FROM messages WHERE id = ?';
+    const existing = await sqlite.getFirstAsync<{ 
+      id: string; 
+      status: string; 
+      localMediaPath: string | null;
+      translatedText: string | null;
+      translatedLanguage: string | null;
+      translatedAt: number | null;
+    }>(
       existingSql,
       [message.id]
     );
@@ -576,11 +587,13 @@ export async function syncMessageToSQLite(message: Message): Promise<void> {
     
     // Use UPSERT (INSERT OR REPLACE) to handle race conditions atomically
     // This prevents UNIQUE constraint errors
+    // Preserve translation fields if they exist locally
     const upsertSql = `
       INSERT INTO messages (
         id, chatId, senderId, text, mediaUrl, mediaMime, localMediaPath, replyToId,
-        status, deliveredTo, readBy, createdAt, edited, editedAt, syncedToFirestore
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        status, deliveredTo, readBy, createdAt, edited, editedAt,
+        translatedText, translatedLanguage, translatedAt, syncedToFirestore
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
       ON CONFLICT(id) DO UPDATE SET
         text = excluded.text,
         mediaUrl = excluded.mediaUrl,
@@ -591,6 +604,9 @@ export async function syncMessageToSQLite(message: Message): Promise<void> {
         readBy = excluded.readBy,
         edited = excluded.edited,
         editedAt = excluded.editedAt,
+        translatedText = COALESCE(messages.translatedText, excluded.translatedText),
+        translatedLanguage = COALESCE(messages.translatedLanguage, excluded.translatedLanguage),
+        translatedAt = COALESCE(messages.translatedAt, excluded.translatedAt),
         syncedToFirestore = 1
     `;
     
@@ -609,6 +625,9 @@ export async function syncMessageToSQLite(message: Message): Promise<void> {
       message.createdAt,
       message.edited ? 1 : 0,
       message.editedAt || null,
+      message.translatedText || null,
+      message.translatedLanguage || null,
+      message.translatedAt || null,
     ]);
     
     // Log appropriately based on what happened
@@ -792,6 +811,85 @@ export async function getQueuedMessages(): Promise<Message[]> {
     return messages;
   } catch (error) {
     console.error('❌ Failed to get queued messages:', error);
+    return [];
+  }
+}
+
+/**
+ * Save a message translation to SQLite
+ * Caches the translation permanently for offline access
+ */
+export async function saveMessageTranslation(
+  messageId: string,
+  translatedText: string,
+  targetLanguage: string
+): Promise<void> {
+  try {
+    const sql = `
+      UPDATE messages 
+      SET translatedText = ?, translatedLanguage = ?, translatedAt = ?
+      WHERE id = ?
+    `;
+    
+    await executeStatement(sql, [
+      translatedText,
+      targetLanguage,
+      Date.now(),
+      messageId,
+    ]);
+    
+    console.log(`✅ Translation saved for message ${messageId}`);
+  } catch (error) {
+    console.error('❌ Failed to save translation:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get all messages for a chat (no limit, for summaries)
+ * @param chatId - Chat ID
+ * @returns Array of all messages
+ */
+export async function getAllMessagesForChat(chatId: string): Promise<Message[]> {
+  try {
+    const sqlite = getDatabase();
+    
+    const sql = `
+      SELECT 
+        id, chatId, senderId, text, mediaUrl, mediaMime, localMediaPath,
+        replyToId, status, deliveredTo, readBy, createdAt, edited, editedAt,
+        translatedText, translatedLanguage, translatedAt
+      FROM messages
+      WHERE chatId = ?
+      ORDER BY createdAt ASC
+    `;
+    
+    const result = await sqlite.getAllAsync<any>(sql, [chatId]);
+    
+    // Convert SQLite rows to Message objects
+    const messages: Message[] = result.map((row) => ({
+      id: row.id,
+      chatId: row.chatId,
+      senderId: row.senderId,
+      text: row.text || undefined,
+      mediaUrl: row.mediaUrl || undefined,
+      mediaMime: row.mediaMime || undefined,
+      localMediaPath: row.localMediaPath || undefined,
+      replyToId: row.replyToId || undefined,
+      status: row.status as MessageStatus,
+      deliveredTo: row.deliveredTo ? JSON.parse(row.deliveredTo) : [],
+      readBy: row.readBy ? JSON.parse(row.readBy) : [],
+      edited: row.edited === 1,
+      editedAt: row.editedAt || undefined,
+      createdAt: row.createdAt,
+      translatedText: row.translatedText || undefined,
+      translatedLanguage: row.translatedLanguage || undefined,
+      translatedAt: row.translatedAt || undefined,
+    }));
+    
+    return messages;
+  } catch (error) {
+    console.error('❌ Failed to get all messages from SQLite:', error);
     return [];
   }
 }

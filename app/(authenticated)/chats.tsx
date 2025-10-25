@@ -7,6 +7,7 @@ import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   RefreshControl,
@@ -16,12 +17,14 @@ import {
   View,
 } from 'react-native';
 
+import ChatSummaryModal from '@/components/ChatSummaryModal';
 import { useActivity } from '@/contexts/ActivityContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProfileCache } from '@/contexts/ProfileCacheContext';
 import { useUser } from '@/contexts/UserContext';
 import { onUserChatsSnapshot } from '@/services/chat.service';
-import { markMessageAsDelivered } from '@/services/message.service';
+import { getAllMessagesForChat, markMessageAsDelivered } from '@/services/message.service';
+import { summarizeChat } from '@/services/openai.service';
 import { onUserPresenceChange, onUsersPresenceChange } from '@/services/presence.service';
 import { onUsersProfilesSnapshot } from '@/services/user.service';
 import type { Chat } from '@/types/chat.types';
@@ -43,6 +46,13 @@ export default function ChatsScreen() {
   
   // Track which messages we've already marked as delivered to avoid duplicate writes
   const deliveredMessagesRef = useRef<Set<string>>(new Set());
+  
+  // Chat summary modal state
+  const [summaryModalVisible, setSummaryModalVisible] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryText, setSummaryText] = useState<string | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [selectedChatForSummary, setSelectedChatForSummary] = useState<Chat | null>(null);
 
   // Subscribe to user's chats in real-time
   useEffect(() => {
@@ -269,6 +279,84 @@ export default function ChatsScreen() {
     }
   };
 
+  // Handle long press on chat to show summary option
+  const handleChatLongPress = (chat: Chat) => {
+    Alert.alert(
+      'Chat Actions',
+      'What would you like to do?',
+      [
+        {
+          text: 'AI Summary',
+          onPress: () => handleGenerateSummary(chat),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  // Generate AI summary for a chat
+  const handleGenerateSummary = async (chat: Chat) => {
+    setSelectedChatForSummary(chat);
+    setSummaryModalVisible(true);
+    setSummaryLoading(true);
+    setSummaryText(null);
+    setSummaryError(null);
+
+    try {
+      console.log(`📝 Generating summary for chat ${chat.id}`);
+      
+      // Fetch all messages for this chat
+      const messages = await getAllMessagesForChat(chat.id);
+      
+      if (messages.length === 0) {
+        setSummaryError('No messages to summarize in this chat.');
+        setSummaryLoading(false);
+        return;
+      }
+
+      // Call OpenAI API to generate summary
+      const summary = await summarizeChat(messages);
+      
+      setSummaryText(summary);
+      console.log('✅ Summary generated successfully');
+    } catch (error) {
+      console.error('❌ Summary generation failed:', error);
+      
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Failed to generate summary. Please try again.';
+      
+      setSummaryError(errorMessage);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  // Close summary modal
+  const handleCloseSummaryModal = () => {
+    setSummaryModalVisible(false);
+    setSummaryText(null);
+    setSummaryError(null);
+    setSelectedChatForSummary(null);
+  };
+
+  // Get chat title for summary modal
+  const getSummaryModalTitle = (): string => {
+    if (!selectedChatForSummary) return 'Chat';
+    
+    if (selectedChatForSummary.type === 'group') {
+      return selectedChatForSummary.groupName || 'Group Chat';
+    } else {
+      // DM - get other participant's name
+      const otherParticipantId = selectedChatForSummary.participantIds.find(id => id !== user?.uid);
+      const otherParticipant = otherParticipantId ? chatParticipants[otherParticipantId] : null;
+      return otherParticipant?.displayName || 'Chat';
+    }
+  };
+
   const renderChatItem = ({ item }: { item: Chat }) => {
     const { title, subtitle, presence, avatarUrl, avatarLocalPath } = getChatDisplayInfo(item);
 
@@ -278,6 +366,8 @@ export default function ChatsScreen() {
         onPress={() => {
           router.push(`/(authenticated)/chat/${item.id}` as any);
         }}
+        onLongPress={() => handleChatLongPress(item)}
+        delayLongPress={500}
       >
         {/* Avatar with presence indicator */}
         <View style={styles.avatarContainer}>
@@ -433,6 +523,16 @@ export default function ChatsScreen() {
             </Text>
           </View>
         )}
+
+        {/* Chat Summary Modal */}
+        <ChatSummaryModal
+          visible={summaryModalVisible}
+          summary={summaryText}
+          loading={summaryLoading}
+          error={summaryError}
+          chatTitle={getSummaryModalTitle()}
+          onClose={handleCloseSummaryModal}
+        />
       </Screen.Content>
     </Screen>
   );
