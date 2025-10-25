@@ -13,6 +13,8 @@ service cloud.firestore {
     }
     
     // Users collection
+    // NOTE: User presence (online/offline/away) is now tracked in Realtime Database
+    // See database.rules.json for presence rules
     match /users/{userId} {
       // Anyone authenticated can read any user profile (for search, chat participants, etc.)
       allow read: if isAuthenticated();
@@ -58,13 +60,13 @@ service cloud.firestore {
                          request.auth.uid == resource.data.senderId;
         
         // Sender can update their own messages
-        // OR participants can update status field only (for delivery/read receipts)
+        // OR participants can update status/delivery/read fields only
         allow update: if isAuthenticated() && (
           // Sender can update anything
           request.auth.uid == resource.data.senderId ||
-          // Participants can only update the status and updatedAt fields
+          // Participants can only update status, deliveredTo, readBy, and updatedAt fields
           (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds &&
-           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']))
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'deliveredTo', 'readBy', 'updatedAt']))
         );
       }
       
@@ -78,15 +80,8 @@ service cloud.firestore {
         allow write: if isOwner(userId);
       }
       
-      // Typing indicators subcollection
-      match /typing/{userId} {
-        // Participants can read all typing statuses in their chats
-        allow read: if isAuthenticated() && 
-                       request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
-        
-        // Users can only write their own typing status
-        allow write: if isOwner(userId);
-      }
+      // NOTE: Typing indicators have been moved to Realtime Database
+      // See database.rules.json for typing indicator rules
     }
     
     // Usernames collection (for username uniqueness enforcement)

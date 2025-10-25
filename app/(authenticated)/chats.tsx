@@ -4,10 +4,12 @@
  */
 
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  Image,
   RefreshControl,
   StyleSheet,
   Text,
@@ -15,22 +17,42 @@ import {
   View,
 } from 'react-native';
 
+import ChatSummaryModal from '@/components/ChatSummaryModal';
+import { useActivity } from '@/contexts/ActivityContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProfileCache } from '@/contexts/ProfileCacheContext';
 import { useUser } from '@/contexts/UserContext';
-import { usePresenceTracking } from '@/hooks/usePresenceTracking';
 import { onUserChatsSnapshot } from '@/services/chat.service';
-import { getUsersByIds } from '@/services/user.service';
+import { getAllMessagesForChat, markMessageAsDelivered } from '@/services/message.service';
+import { summarizeChat } from '@/services/openai.service';
+import { onUserPresenceChange, onUsersPresenceChange } from '@/services/presence.service';
+import { onUsersProfilesSnapshot } from '@/services/user.service';
 import type { Chat } from '@/types/chat.types';
-import type { User } from '@/types/user.types';
+import type { PublicUserProfile, User, UserPresence } from '@/types/user.types';
+import GroupAvatar from '../../components/GroupAvatar';
+import Screen from '../../components/Screen';
 
 export default function ChatsScreen() {
   const { user, logOut } = useAuth();
   const { userProfile } = useUser();
-  const { resetActivityTimer } = usePresenceTracking();
+  const { resetActivityTimer } = useActivity();
+  const { getProfiles } = useProfileCache();
   const [chats, setChats] = useState<Chat[]>([]);
-  const [chatParticipants, setChatParticipants] = useState<Record<string, User>>({});
+  const [chatParticipants, setChatParticipants] = useState<Record<string, PublicUserProfile>>({});
+  const [presenceData, setPresenceData] = useState<Record<string, { status: UserPresence; lastSeen: number }>>({});
+  const [myPresence, setMyPresence] = useState<UserPresence>('online');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Track which messages we've already marked as delivered to avoid duplicate writes
+  const deliveredMessagesRef = useRef<Set<string>>(new Set());
+  
+  // Chat summary modal state
+  const [summaryModalVisible, setSummaryModalVisible] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryText, setSummaryText] = useState<string | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [selectedChatForSummary, setSelectedChatForSummary] = useState<Chat | null>(null);
 
   // Subscribe to user's chats in real-time
   useEffect(() => {
@@ -46,28 +68,24 @@ export default function ChatsScreen() {
     const unsubscribe = onUserChatsSnapshot(user.uid, async (updatedChats) => {
       setChats(updatedChats);
       setLoading(false);
-      // Note: setRefreshing(false) is now handled by handleRefresh for manual refreshes
-
-      // Fetch participant info for all chats
-      const allParticipantIds = new Set<string>();
-      updatedChats.forEach(chat => {
-        chat.participantIds.forEach(id => {
-          if (id !== user.uid) { // Don't fetch current user
-            allParticipantIds.add(id);
-          }
-        });
-      });
-
-      if (allParticipantIds.size > 0) {
-        try {
-          const participants = await getUsersByIds(Array.from(allParticipantIds));
-          const participantsMap: Record<string, User> = {};
-          participants.forEach(participant => {
-            participantsMap[participant.id] = participant;
+      
+      // Mark unread messages from others as delivered
+      for (const chat of updatedChats) {
+        if (chat.lastMessageId && 
+            chat.lastMessageSenderId && 
+            chat.lastMessageSenderId !== user.uid &&
+            !deliveredMessagesRef.current.has(chat.lastMessageId)) {
+          // Mark as delivered
+          deliveredMessagesRef.current.add(chat.lastMessageId);
+          markMessageAsDelivered(
+            chat.id,
+            chat.lastMessageId,
+            user.uid,
+            chat.lastMessageSenderId
+          ).catch((error) => {
+            // Silent fail - delivery status is not critical
+            console.log('Could not mark message as delivered:', error);
           });
-          setChatParticipants(participantsMap);
-        } catch (error) {
-          console.error('Error fetching participants:', error);
         }
       }
     });
@@ -78,42 +96,122 @@ export default function ChatsScreen() {
     };
   }, [user]);
 
+  // Load participant profiles (with caching for instant display)
+  useEffect(() => {
+    if (!user || chats.length === 0) return;
+
+    // Collect all participant IDs from chats
+    const allParticipantIds = new Set<string>();
+    chats.forEach(chat => {
+      chat.participantIds.forEach(id => {
+        if (id !== user.uid) { // Don't fetch current user
+          allParticipantIds.add(id);
+        }
+      });
+    });
+
+    if (allParticipantIds.size === 0) return;
+
+    const participantIdsArray = Array.from(allParticipantIds);
+    console.log(`👥 Loading profiles for ${participantIdsArray.length} participants`);
+
+    // Load profiles from cache first (instant display if available)
+    getProfiles(participantIdsArray).then((profilesMap) => {
+      console.log(`📦 Loaded ${Object.keys(profilesMap).length} profiles from cache`);
+      
+      // Convert PublicUserProfile to User format
+      const userMap: Record<string, User> = {};
+      Object.entries(profilesMap).forEach(([id, profile]) => {
+        userMap[id] = {
+          id: profile.id,
+          username: profile.username,
+          displayName: profile.displayName,
+          avatarUrl: profile.avatarUrl,
+          bio: profile.bio,
+          presence: 'offline', // Will be updated by RTDB
+          lastSeen: profile.lastSeen,
+          deviceTokens: [],
+          createdAt: 0,
+          updatedAt: 0,
+        };
+      });
+      setChatParticipants(userMap);
+    });
+
+    // Also set up real-time listener for updates (avatar changes, name changes, etc.)
+    const unsubscribe = onUsersProfilesSnapshot(
+      participantIdsArray,
+      (participantsMap) => {
+        // Only update if we got data (don't clear cached profiles on network failure)
+        if (Object.keys(participantsMap).length === 0) {
+          console.log('⚠️ Firestore returned empty profiles (likely offline), keeping cached data');
+          return;
+        }
+        
+        console.log('🔄 Participant profiles updated from Firestore:', Object.keys(participantsMap).length);
+        setChatParticipants(participantsMap);
+      }
+    );
+
+    return () => {
+      console.log('👋 Cleaning up profile listeners');
+      unsubscribe();
+    };
+  }, [user, chats, getProfiles]);
+
+  // Subscribe to presence data for all participants (from RTDB)
+  useEffect(() => {
+    const participantIds = Object.keys(chatParticipants);
+    if (participantIds.length === 0) return;
+
+    console.log(`👁️ Setting up RTDB presence for ${participantIds.length} participants`);
+
+    const unsubscribe = onUsersPresenceChange(participantIds, (presenceMap) => {
+      console.log('🔄 Presence data updated from RTDB:', Object.keys(presenceMap).length, 'users');
+      setPresenceData(presenceMap);
+    });
+
+    return () => {
+      console.log('👋 Cleaning up RTDB presence listeners');
+      unsubscribe();
+    };
+  }, [chatParticipants]);
+
+  // Subscribe to current user's own presence (for header avatar)
+  useEffect(() => {
+    if (!user) return;
+
+    console.log('👁️ Setting up RTDB presence for current user');
+
+    const unsubscribe = onUserPresenceChange(user.uid, (presence) => {
+      if (presence) {
+        setMyPresence(presence.status);
+        console.log('🔄 My presence updated:', presence.status);
+      }
+    });
+
+    return () => {
+      console.log('👋 Cleaning up my presence listener');
+      unsubscribe();
+    };
+  }, [user]);
+
   const handleRefresh = async () => {
     if (refreshing) return; // Prevent multiple simultaneous refreshes
 
-    resetActivityTimer();
     setRefreshing(true);
 
     try {
       if (user) {
         console.log('🔄 Pull-to-refresh triggered for user:', user.uid);
 
-        // Force refresh of participant data (usernames, display names, etc.)
-        if (chats.length > 0) {
-          const allParticipantIds = new Set<string>();
-          chats.forEach(chat => {
-            chat.participantIds.forEach(id => {
-              if (id !== user.uid) { // Don't fetch current user
-                allParticipantIds.add(id);
-              }
-            });
-          });
-
-          if (allParticipantIds.size > 0) {
-            console.log(`🔄 Refreshing ${allParticipantIds.size} participant profiles`);
-            const participants = await getUsersByIds(Array.from(allParticipantIds));
-            const participantsMap: Record<string, User> = {};
-            participants.forEach(participant => {
-              participantsMap[participant.id] = participant;
-            });
-            setChatParticipants(participantsMap);
-            console.log('✅ Participant profiles refreshed');
-          }
-        }
+        // Profiles are already being updated in real-time by listeners
+        // Just show the refresh animation for UX
 
         // Show refresh indicator for at least 1 second for good UX
         setTimeout(() => {
           setRefreshing(false);
+          console.log('✅ Refresh complete (real-time data already synced)');
         }, 1000);
       } else {
         setRefreshing(false);
@@ -129,16 +227,23 @@ export default function ChatsScreen() {
       return {
         title: chat.groupName || 'Unnamed Group',
         subtitle: chat.lastMessageText || 'No messages yet',
+        presence: 'offline' as UserPresence,
+        avatarUrl: undefined,
+        avatarLocalPath: undefined,
       };
     }
 
-    // DM chat - get other participant's name
+    // DM chat - get other participant's name and presence
     const otherParticipantId = chat.participantIds.find(id => id !== user?.uid);
     const otherParticipant = otherParticipantId ? chatParticipants[otherParticipantId] : null;
+    const presence = otherParticipantId ? presenceData[otherParticipantId]?.status || 'offline' : 'offline';
 
     return {
       title: otherParticipant?.displayName || 'Unknown User',
       subtitle: chat.lastMessageText || 'No messages yet',
+      presence,
+      avatarUrl: otherParticipant?.avatarUrl,
+      avatarLocalPath: otherParticipant?.avatarLocalPath,
     };
   };
 
@@ -163,22 +268,136 @@ export default function ChatsScreen() {
     }
   };
 
+  const getPresenceColor = (presence: UserPresence) => {
+    switch (presence) {
+      case 'online':
+        return '#34C759'; // Green
+      case 'away':
+        return '#FF9500'; // Orange
+      default:
+        return '#8E8E93'; // Gray
+    }
+  };
+
+  // Handle long press on chat to show summary option
+  const handleChatLongPress = (chat: Chat) => {
+    Alert.alert(
+      'Chat Actions',
+      'What would you like to do?',
+      [
+        {
+          text: 'AI Summary',
+          onPress: () => handleGenerateSummary(chat),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  // Generate AI summary for a chat
+  const handleGenerateSummary = async (chat: Chat) => {
+    setSelectedChatForSummary(chat);
+    setSummaryModalVisible(true);
+    setSummaryLoading(true);
+    setSummaryText(null);
+    setSummaryError(null);
+
+    try {
+      console.log(`📝 Generating summary for chat ${chat.id}`);
+      
+      // Fetch all messages for this chat
+      const messages = await getAllMessagesForChat(chat.id);
+      
+      if (messages.length === 0) {
+        setSummaryError('No messages to summarize in this chat.');
+        setSummaryLoading(false);
+        return;
+      }
+
+      // Call OpenAI API to generate summary
+      const summary = await summarizeChat(messages);
+      
+      setSummaryText(summary);
+      console.log('✅ Summary generated successfully');
+    } catch (error) {
+      console.error('❌ Summary generation failed:', error);
+      
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Failed to generate summary. Please try again.';
+      
+      setSummaryError(errorMessage);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  // Close summary modal
+  const handleCloseSummaryModal = () => {
+    setSummaryModalVisible(false);
+    setSummaryText(null);
+    setSummaryError(null);
+    setSelectedChatForSummary(null);
+  };
+
+  // Get chat title for summary modal
+  const getSummaryModalTitle = (): string => {
+    if (!selectedChatForSummary) return 'Chat';
+    
+    if (selectedChatForSummary.type === 'group') {
+      return selectedChatForSummary.groupName || 'Group Chat';
+    } else {
+      // DM - get other participant's name
+      const otherParticipantId = selectedChatForSummary.participantIds.find(id => id !== user?.uid);
+      const otherParticipant = otherParticipantId ? chatParticipants[otherParticipantId] : null;
+      return otherParticipant?.displayName || 'Chat';
+    }
+  };
+
   const renderChatItem = ({ item }: { item: Chat }) => {
-    const { title, subtitle } = getChatDisplayInfo(item);
+    const { title, subtitle, presence, avatarUrl, avatarLocalPath } = getChatDisplayInfo(item);
 
     return (
       <TouchableOpacity
         style={styles.chatItem}
         onPress={() => {
-          resetActivityTimer();
-          router.push(`/chat/${item.id}` as any);
+          router.push(`/(authenticated)/chat/${item.id}` as any);
         }}
+        onLongPress={() => handleChatLongPress(item)}
+        delayLongPress={500}
       >
-        {/* Avatar placeholder */}
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {title.charAt(0).toUpperCase()}
-          </Text>
+        {/* Avatar with presence indicator */}
+        <View style={styles.avatarContainer}>
+          {item.type === 'group' ? (
+            <GroupAvatar
+              groupName={item.groupName}
+              avatarUrl={item.groupAvatarUrl}
+              groupId={item.id}
+              size={56}
+            />
+          ) : (
+            <>
+              <View style={styles.avatar}>
+                {avatarLocalPath ? (
+                  <Image 
+                    source={{ uri: avatarLocalPath }} 
+                    style={styles.avatarImage} 
+                  />
+                ) : avatarUrl ? (
+                  <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.avatarText}>
+                    {title.charAt(0).toUpperCase()}
+                  </Text>
+                )}
+              </View>
+              {/* Show presence dot for DM chats only */}
+              <View style={[styles.presenceDot, { backgroundColor: getPresenceColor(presence) }]} />
+            </>
+          )}
         </View>
 
         {/* Chat info */}
@@ -220,17 +439,53 @@ export default function ChatsScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Chats</Text>
-        <TouchableOpacity onPress={logOut} style={styles.logoutButton}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
-      </View>
+    <Screen>
+      <Screen.Header>
+        {/* Header */}
+        <View style={styles.header}>
+          {/* Left: Title */}
+          <View style={styles.headerLeft}>
+            <Text style={styles.headerTitle}>Chats</Text>
+          </View>
+          
+          {/* Center: Profile Photo with Status */}
+          <TouchableOpacity 
+            style={styles.profileContainer}
+            onPress={() => router.push('/(authenticated)/profile')}
+          >
+            <View style={styles.profileAvatarWrapper}>
+              <View style={styles.profileAvatar}>
+                {userProfile?.avatarUrl ? (
+                  <Image
+                    source={{ uri: userProfile.avatarUrl }}
+                    style={styles.profileAvatarImage}
+                  />
+                ) : (
+                  <Text style={styles.profileAvatarText}>
+                    {userProfile?.displayName?.charAt(0).toUpperCase() || '?'}
+                  </Text>
+                )}
+              </View>
+              {/* Status indicator - sibling of avatar, not child */}
+              <View style={[
+                styles.profilePresenceDot,
+                { backgroundColor: getPresenceColor(myPresence) }
+              ]} />
+            </View>
+          </TouchableOpacity>
+          
+          {/* Right: Logout */}
+          <View style={styles.headerRight}>
+            <TouchableOpacity onPress={logOut} style={styles.logoutButton}>
+              <Text style={styles.logoutText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Screen.Header>
 
-      {/* Chat List */}
-      <FlatList
+      <Screen.Content>
+        {/* Chat List */}
+        <FlatList
         style={{flex: 1, minHeight: '100%'}}
         data={chats}
         renderItem={renderChatItem}
@@ -250,26 +505,36 @@ export default function ChatsScreen() {
         }
       />
 
-      {/* New Chat FAB */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => {
-          resetActivityTimer();
-          router.push('/(authenticated)/new-chat');
-        }}
-      >
-        <Text style={styles.fabIcon}>✏️</Text>
-      </TouchableOpacity>
+        {/* New Chat FAB */}
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => {
+            router.push('/(authenticated)/new-chat');
+          }}
+        >
+          <Text style={styles.fabIcon}>✏️</Text>
+        </TouchableOpacity>
 
-      {/* Debug info */}
-      {__DEV__ && (
-        <View style={styles.debugInfo}>
-          <Text style={styles.debugText}>
-            {userProfile?.displayName} • {chats.length} chats
-          </Text>
-        </View>
-      )}
-    </View>
+        {/* Debug info */}
+        {__DEV__ && (
+          <View style={styles.debugInfo}>
+            <Text style={styles.debugText}>
+              {userProfile?.displayName} • {chats.length} chats
+            </Text>
+          </View>
+        )}
+
+        {/* Chat Summary Modal */}
+        <ChatSummaryModal
+          visible={summaryModalVisible}
+          summary={summaryText}
+          loading={summaryLoading}
+          error={summaryError}
+          chatTitle={getSummaryModalTitle()}
+          onClose={handleCloseSummaryModal}
+        />
+      </Screen.Content>
+    </Screen>
   );
 }
 
@@ -300,10 +565,56 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e0e0e0',
     backgroundColor: '#fff',
   },
+  headerLeft: {
+    flex: 1,
+    alignItems: 'flex-start',
+  },
   headerTitle: {
     fontSize: 32,
     fontWeight: 'bold',
     color: '#000',
+  },
+  profileContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16, // Add some padding around the profile
+  },
+  profileAvatarWrapper: {
+    position: 'relative',
+    width: 50,
+    height: 50,
+  },
+  profileAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  profileAvatarImage: {
+    width: 50,
+    height: 50,
+  },
+  profileAvatarText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  profilePresenceDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  headerRight: {
+    flex: 1,
+    alignItems: 'flex-end',
   },
   logoutButton: {
     padding: 8,
@@ -319,6 +630,10 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f0f0f0',
     backgroundColor: '#fff',
   },
+  avatarContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
   avatar: {
     width: 56,
     height: 56,
@@ -326,7 +641,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 56,
+    height: 56,
+  },
+  presenceDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   avatarText: {
     fontSize: 24,

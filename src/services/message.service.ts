@@ -7,6 +7,7 @@
  * - Offline queue: messages are queued when offline
  * - Retry mechanism: failed messages can be retried
  * - SQLite + Firestore sync
+ * - Media caching: automatically cache attachments
  */
 
 import { db } from '@/config/firebase';
@@ -14,11 +15,15 @@ import { executeStatement, getDatabase } from '@/database/database';
 import type { CreateMessageData, Message, MessageStatus } from '@/types/chat.types';
 import NetInfo from '@react-native-community/netinfo';
 import {
+  arrayUnion,
+  collection,
   doc,
   serverTimestamp,
   setDoc,
   updateDoc
 } from 'firebase/firestore';
+
+import { cacheMedia, getCachedMediaPath } from './media-cache.service';
 
 const CHATS_COLLECTION = 'chats';
 const MESSAGES_COLLECTION = 'messages';
@@ -169,6 +174,8 @@ async function sendMessageToFirestore(
     senderId: message.senderId,
     status: 'sent',
     edited: false,
+    deliveredTo: [], // Initialize empty array for delivery tracking
+    readBy: [], // Initialize empty array for read tracking
     createdAt: serverTimestamp(),
   };
   
@@ -187,13 +194,15 @@ async function sendMessageToFirestore(
 async function updateChatLastMessage(
   chatId: string,
   messageId: string,
-  messageText: string
+  messageText: string,
+  senderId: string
 ): Promise<void> {
   const chatRef = doc(db, CHATS_COLLECTION, chatId);
   
   await updateDoc(chatRef, {
     lastMessageId: messageId,
     lastMessageText: messageText || '[Media]',
+    lastMessageSenderId: senderId,
     lastMessageAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -245,15 +254,116 @@ export async function markMessageAsDelivered(
   }
   
   try {
-    // Update in Firestore
-    await updateMessageStatusInFirestore(chatId, messageId, 'delivered');
+    // Update in Firestore - add user to deliveredTo array
+    const messageRef = doc(db, CHATS_COLLECTION, chatId, MESSAGES_COLLECTION, messageId);
+    await updateDoc(messageRef, {
+      deliveredTo: arrayUnion(currentUserId)
+    });
     
-    // Update in SQLite
-    await updateMessageStatusInSQLite(messageId, 'delivered', true);
-    
-    // Silent success - delivery status updates are frequent and not critical to log
+    console.log(`✅ Marked message ${messageId} as delivered to ${currentUserId}`);
   } catch (error) {
     console.error(`❌ Failed to mark message as delivered:`, error);
+  }
+}
+
+/**
+ * Mark a message as read
+ * Called when the recipient views the message
+ */
+export async function markMessageAsRead(
+  chatId: string,
+  messageId: string,
+  currentUserId: string,
+  senderId: string
+): Promise<void> {
+  // Only mark as read if the current user is NOT the sender
+  if (currentUserId === senderId) {
+    return;
+  }
+  
+  try {
+    // Update in Firestore - add user to both arrays (reading implies delivery)
+    const messageRef = doc(db, CHATS_COLLECTION, chatId, MESSAGES_COLLECTION, messageId);
+    await updateDoc(messageRef, {
+      deliveredTo: arrayUnion(currentUserId),
+      readBy: arrayUnion(currentUserId)
+    });
+    
+    console.log(`✅ Marked message ${messageId} as read by ${currentUserId}`);
+  } catch (error) {
+    console.error(`❌ Failed to mark message as read:`, error);
+  }
+}
+
+/**
+ * Mark all unread messages in a chat as read
+ * Called when user opens/views a chat
+ */
+export async function markAllMessagesAsRead(
+  chatId: string,
+  currentUserId: string
+): Promise<void> {
+  try {
+    const sqlite = getDatabase();
+    
+    // Get all unread messages (sent/delivered status) from other users
+    const sql = `
+      SELECT id, senderId
+      FROM messages
+      WHERE chatId = ? 
+        AND senderId != ?
+        AND status IN ('sent', 'delivered')
+      ORDER BY createdAt ASC
+    `;
+    
+    const unreadMessages = await sqlite.getAllAsync<{ id: string; senderId: string }>(
+      sql,
+      [chatId, currentUserId]
+    );
+    
+    if (unreadMessages.length === 0) {
+      return; // No unread messages
+    }
+    
+    console.log(`👁️ Marking ${unreadMessages.length} messages as read`);
+    
+    // Mark each message as read
+    for (const message of unreadMessages) {
+      await markMessageAsRead(chatId, message.id, currentUserId, message.senderId);
+    }
+    
+    console.log(`✅ Marked ${unreadMessages.length} messages as read`);
+  } catch (error) {
+    console.error('❌ Failed to mark all messages as read:', error);
+  }
+}
+
+/**
+ * Create a system message (for group events)
+ * System messages don't have a sender and are styled differently
+ * @param chatId - Chat ID
+ * @param text - System message text
+ */
+export async function createSystemMessage(
+  chatId: string,
+  text: string
+): Promise<void> {
+  try {
+    const messageRef = doc(collection(db, CHATS_COLLECTION, chatId, MESSAGES_COLLECTION));
+    
+    await setDoc(messageRef, {
+      chatId,
+      senderId: 'system', // Special sender ID for system messages
+      text,
+      status: 'sent',
+      edited: false,
+      createdAt: serverTimestamp(),
+    });
+    
+    console.log('✅ System message created');
+  } catch (error) {
+    console.error('❌ Failed to create system message:', error);
+    // Don't throw - system messages are not critical
   }
 }
 
@@ -318,7 +428,7 @@ export async function sendMessageOptimistic(
         // Add timeout to Firestore write (10 seconds)
         const firestoreWritePromise = Promise.all([
           sendMessageToFirestore(message),
-          updateChatLastMessage(message.chatId, message.id, message.text || '')
+          updateChatLastMessage(message.chatId, message.id, message.text || '', message.senderId)
         ]);
         
         const timeoutPromise = new Promise((_, reject) =>
@@ -378,8 +488,9 @@ export async function getMessagesFromSQLite(
     
     const sql = `
       SELECT 
-        id, chatId, senderId, text, mediaUrl, mediaMime, replyToId,
-        status, createdAt, edited, editedAt
+        id, chatId, senderId, text, mediaUrl, mediaMime, localMediaPath,
+        replyToId, status, deliveredTo, readBy, createdAt, edited, editedAt,
+        translatedText, translatedLanguage, translatedAt
       FROM messages
       WHERE chatId = ?
       ORDER BY createdAt DESC
@@ -396,11 +507,17 @@ export async function getMessagesFromSQLite(
       text: row.text || undefined,
       mediaUrl: row.mediaUrl || undefined,
       mediaMime: row.mediaMime || undefined,
+      localMediaPath: row.localMediaPath || undefined,
       replyToId: row.replyToId || undefined,
       status: row.status as MessageStatus,
+      deliveredTo: row.deliveredTo ? JSON.parse(row.deliveredTo) : [],
+      readBy: row.readBy ? JSON.parse(row.readBy) : [],
       edited: row.edited === 1,
       editedAt: row.editedAt || undefined,
       createdAt: row.createdAt,
+      translatedText: row.translatedText || undefined,
+      translatedLanguage: row.translatedLanguage || undefined,
+      translatedAt: row.translatedAt || undefined,
     }));
     
     // Return in ascending order (oldest first)
@@ -414,97 +531,113 @@ export async function getMessagesFromSQLite(
 /**
  * Sync a received message from Firestore to SQLite
  * Used when receiving messages via real-time listener
+ * Also caches media attachments if present
  */
 export async function syncMessageToSQLite(message: Message): Promise<void> {
   try {
     const sqlite = getDatabase();
     
-    // Check if message already exists
-    const existingSql = 'SELECT id, status FROM messages WHERE id = ?';
-    const existing = await sqlite.getFirstAsync<{ id: string; status: string }>(
+    // Check if message already exists and get its current status
+    const existingSql = 'SELECT id, status, localMediaPath, translatedText, translatedLanguage, translatedAt FROM messages WHERE id = ?';
+    const existing = await sqlite.getFirstAsync<{ 
+      id: string; 
+      status: string; 
+      localMediaPath: string | null;
+      translatedText: string | null;
+      translatedLanguage: string | null;
+      translatedAt: number | null;
+    }>(
       existingSql,
       [message.id]
     );
     
-    if (existing) {
-      // Update existing message (only if status changed or other fields differ)
-      const updateSql = `
-        UPDATE messages 
-        SET text = ?, mediaUrl = ?, mediaMime = ?, status = ?,
-            edited = ?, editedAt = ?, syncedToFirestore = 1
-        WHERE id = ?
-      `;
-      
-      await executeStatement(updateSql, [
-        message.text || null,
-        message.mediaUrl || null,
-        message.mediaMime || null,
-        message.status,
-        message.edited ? 1 : 0,
-        message.editedAt || null,
-        message.id,
-      ]);
-      
-      // Only log if status changed (meaningful update)
-      if (existing.status !== message.status) {
-        console.log(`📝 Message ${message.id} status: ${existing.status} → ${message.status}`);
+    const oldStatus = existing?.status;
+    const isNewMessage = !existing;
+    
+    // If message has media, try to get or cache it
+    let localMediaPath: string | null = null;
+    if (message.mediaUrl) {
+      // Check if already cached
+      if (existing?.localMediaPath) {
+        localMediaPath = existing.localMediaPath;
+      } else {
+        // Try to get from cache
+        localMediaPath = await getCachedMediaPath(message.mediaUrl, message.mediaMime);
+        
+        // If not cached, cache it in background
+        if (!localMediaPath) {
+          cacheMedia(message.mediaUrl, message.mediaMime).then(async (path) => {
+            if (path) {
+              // Update message with local path after caching completes
+              try {
+                await executeStatement(
+                  'UPDATE messages SET localMediaPath = ? WHERE id = ?',
+                  [path, message.id]
+                );
+              } catch (error) {
+                console.error('❌ Failed to update localMediaPath:', error);
+              }
+            }
+          }).catch((error) => {
+            console.error('❌ Failed to cache media in background:', error);
+          });
+        }
       }
-    } else {
-      // Insert new message
-      const insertSql = `
-        INSERT INTO messages (
-          id, chatId, senderId, text, mediaUrl, mediaMime, replyToId,
-          status, createdAt, edited, editedAt, syncedToFirestore
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-      `;
-      
-      await executeStatement(insertSql, [
-        message.id,
-        message.chatId,
-        message.senderId,
-        message.text || null,
-        message.mediaUrl || null,
-        message.mediaMime || null,
-        message.replyToId || null,
-        message.status,
-        message.createdAt,
-        message.edited ? 1 : 0,
-        message.editedAt || null,
-      ]);
-      
-      // Only log new message inserts, not updates
+    }
+    
+    // Use UPSERT (INSERT OR REPLACE) to handle race conditions atomically
+    // This prevents UNIQUE constraint errors
+    // Preserve translation fields if they exist locally
+    const upsertSql = `
+      INSERT INTO messages (
+        id, chatId, senderId, text, mediaUrl, mediaMime, localMediaPath, replyToId,
+        status, deliveredTo, readBy, createdAt, edited, editedAt,
+        translatedText, translatedLanguage, translatedAt, syncedToFirestore
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      ON CONFLICT(id) DO UPDATE SET
+        text = excluded.text,
+        mediaUrl = excluded.mediaUrl,
+        mediaMime = excluded.mediaMime,
+        localMediaPath = COALESCE(excluded.localMediaPath, messages.localMediaPath),
+        status = excluded.status,
+        deliveredTo = excluded.deliveredTo,
+        readBy = excluded.readBy,
+        edited = excluded.edited,
+        editedAt = excluded.editedAt,
+        translatedText = COALESCE(messages.translatedText, excluded.translatedText),
+        translatedLanguage = COALESCE(messages.translatedLanguage, excluded.translatedLanguage),
+        translatedAt = COALESCE(messages.translatedAt, excluded.translatedAt),
+        syncedToFirestore = 1
+    `;
+    
+    await executeStatement(upsertSql, [
+      message.id,
+      message.chatId,
+      message.senderId,
+      message.text || null,
+      message.mediaUrl || null,
+      message.mediaMime || null,
+      localMediaPath,
+      message.replyToId || null,
+      message.status,
+      JSON.stringify(message.deliveredTo || []),
+      JSON.stringify(message.readBy || []),
+      message.createdAt,
+      message.edited ? 1 : 0,
+      message.editedAt || null,
+      message.translatedText || null,
+      message.translatedLanguage || null,
+      message.translatedAt || null,
+    ]);
+    
+    // Log appropriately based on what happened
+    if (isNewMessage) {
       console.log('✅ New message synced to SQLite:', message.id);
+    } else if (oldStatus !== message.status) {
+      console.log(`📝 Message ${message.id} status: ${oldStatus} → ${message.status}`);
     }
   } catch (error) {
-    // If we get a UNIQUE constraint error, it means a race condition occurred
-    // Try to update the existing message instead
-    if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
-      try {
-        const sqlite = getDatabase();
-        const updateSql = `
-          UPDATE messages 
-          SET text = ?, mediaUrl = ?, mediaMime = ?, status = ?,
-              edited = ?, editedAt = ?, syncedToFirestore = 1
-          WHERE id = ?
-        `;
-        
-        await executeStatement(updateSql, [
-          message.text || null,
-          message.mediaUrl || null,
-          message.mediaMime || null,
-          message.status,
-          message.edited ? 1 : 0,
-          message.editedAt || null,
-          message.id,
-        ]);
-        
-        console.log(`🔄 Recovered from race condition - updated message ${message.id}`);
-      } catch (updateError) {
-        console.error('❌ Failed to recover from UNIQUE constraint error:', updateError);
-      }
-    } else {
-      console.error('❌ Failed to sync message to SQLite:', error);
-    }
+    console.error('❌ Failed to sync message to SQLite:', error);
   }
 }
 
@@ -574,7 +707,8 @@ export async function retryFailedMessage(
       await updateChatLastMessage(
         message.chatId,
         message.id,
-        message.text || ''
+        message.text || '',
+        message.senderId
       );
       
       // Update status to "sent"
@@ -677,6 +811,85 @@ export async function getQueuedMessages(): Promise<Message[]> {
     return messages;
   } catch (error) {
     console.error('❌ Failed to get queued messages:', error);
+    return [];
+  }
+}
+
+/**
+ * Save a message translation to SQLite
+ * Caches the translation permanently for offline access
+ */
+export async function saveMessageTranslation(
+  messageId: string,
+  translatedText: string,
+  targetLanguage: string
+): Promise<void> {
+  try {
+    const sql = `
+      UPDATE messages 
+      SET translatedText = ?, translatedLanguage = ?, translatedAt = ?
+      WHERE id = ?
+    `;
+    
+    await executeStatement(sql, [
+      translatedText,
+      targetLanguage,
+      Date.now(),
+      messageId,
+    ]);
+    
+    console.log(`✅ Translation saved for message ${messageId}`);
+  } catch (error) {
+    console.error('❌ Failed to save translation:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get all messages for a chat (no limit, for summaries)
+ * @param chatId - Chat ID
+ * @returns Array of all messages
+ */
+export async function getAllMessagesForChat(chatId: string): Promise<Message[]> {
+  try {
+    const sqlite = getDatabase();
+    
+    const sql = `
+      SELECT 
+        id, chatId, senderId, text, mediaUrl, mediaMime, localMediaPath,
+        replyToId, status, deliveredTo, readBy, createdAt, edited, editedAt,
+        translatedText, translatedLanguage, translatedAt
+      FROM messages
+      WHERE chatId = ?
+      ORDER BY createdAt ASC
+    `;
+    
+    const result = await sqlite.getAllAsync<any>(sql, [chatId]);
+    
+    // Convert SQLite rows to Message objects
+    const messages: Message[] = result.map((row) => ({
+      id: row.id,
+      chatId: row.chatId,
+      senderId: row.senderId,
+      text: row.text || undefined,
+      mediaUrl: row.mediaUrl || undefined,
+      mediaMime: row.mediaMime || undefined,
+      localMediaPath: row.localMediaPath || undefined,
+      replyToId: row.replyToId || undefined,
+      status: row.status as MessageStatus,
+      deliveredTo: row.deliveredTo ? JSON.parse(row.deliveredTo) : [],
+      readBy: row.readBy ? JSON.parse(row.readBy) : [],
+      edited: row.edited === 1,
+      editedAt: row.editedAt || undefined,
+      createdAt: row.createdAt,
+      translatedText: row.translatedText || undefined,
+      translatedLanguage: row.translatedLanguage || undefined,
+      translatedAt: row.translatedAt || undefined,
+    }));
+    
+    return messages;
+  } catch (error) {
+    console.error('❌ Failed to get all messages from SQLite:', error);
     return [];
   }
 }

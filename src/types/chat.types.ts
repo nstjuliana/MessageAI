@@ -18,6 +18,7 @@ export interface Chat {
   groupAvatarUrl?: string; // For group chats
   lastMessageId?: string;
   lastMessageText?: string;
+  lastMessageSenderId?: string; // User ID of who sent the last message
   lastMessageAt?: number; // Unix timestamp
   createdAt: number; // Unix timestamp
   updatedAt: number; // Unix timestamp
@@ -33,12 +34,18 @@ export interface Message {
   text?: string;
   mediaUrl?: string;
   mediaMime?: string; // MIME type of media (image/jpeg, video/mp4, etc.)
+  localMediaPath?: string; // Local path to cached media file
   replyToId?: string; // ID of message being replied to
   status: MessageStatus;
+  deliveredTo?: string[]; // Array of user IDs who have received the message
+  readBy?: string[]; // Array of user IDs who have read the message
   reactions?: { [emoji: string]: string[] }; // emoji -> array of user IDs
   createdAt: number; // Unix timestamp
   edited: boolean;
   editedAt?: number; // Unix timestamp
+  translatedText?: string; // AI-translated text
+  translatedLanguage?: string; // Target language of translation (e.g., 'en')
+  translatedAt?: number; // Unix timestamp of when translation was created
 }
 
 /**

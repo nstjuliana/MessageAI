@@ -7,7 +7,7 @@ import 'react-native-reanimated';
 
 import { AuthProvider } from '@/contexts/AuthContext';
 import { UserProvider } from '@/contexts/UserContext';
-import { initDatabase } from '@/database/database';
+import { initDatabase, rebuildDatabase } from '@/database/database';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function RootLayout() {
@@ -16,16 +16,43 @@ export default function RootLayout() {
 
   // Initialize database on app start
   useEffect(() => {
-    initDatabase()
-      .then(() => {
-        console.log('Database initialized');
-        setDbInitialized(true);
-      })
-      .catch((error) => {
-        console.error('Failed to initialize database:', error);
-        // Still allow app to run without local database
-        setDbInitialized(true);
-      });
+    // TEMPORARY: Force database rebuild for v8 migration
+    // Remove this after everyone has migrated!
+    const forceRebuild = true; // Set to false after migration
+    
+    if (forceRebuild) {
+      console.log('🔄 Forcing database rebuild for v8 migration...');
+      rebuildDatabase()
+        .then(() => {
+          console.log('✅ Database rebuilt successfully');
+          setDbInitialized(true);
+        })
+        .catch((error) => {
+          console.error('❌ Failed to rebuild database:', error);
+          // Try regular init as fallback
+          initDatabase()
+            .then(() => {
+              console.log('✅ Database initialized (fallback)');
+              setDbInitialized(true);
+            })
+            .catch((initError) => {
+              console.error('❌ Failed to initialize database:', initError);
+              setDbInitialized(true);
+            });
+        });
+    } else {
+      console.log('🔄 Initializing database...');
+      initDatabase()
+        .then(() => {
+          console.log('✅ Database initialized successfully');
+          setDbInitialized(true);
+        })
+        .catch((error) => {
+          console.error('❌ Failed to initialize database:', error);
+          // Still allow app to run without local database
+          setDbInitialized(true);
+        });
+    }
   }, []);
 
   // Show loading while database initializes

@@ -1,15 +1,15 @@
 /**
  * Typing Indicator Hook
- * Manages typing status with debouncing and auto-clear
+ * Manages typing status with debouncing and auto-clear using RTDB
  */
 
-import { clearUserTyping, setUserTyping } from '@/services/typing.service';
+import { clearUserTyping, setUserTyping } from '@/services/typing-rtdb.service';
 import { useCallback, useEffect, useRef } from 'react';
 
-// Typing status cleared after 3 seconds of inactivity
+// Typing status cleared after 1 second of inactivity
 const TYPING_TIMEOUT = 1000;
 
-// Debounce updates to Firestore (don't update more than once per second)
+// Debounce updates to RTDB (don't update more than once every 1 second)
 const TYPING_DEBOUNCE = 1000;
 
 /**
@@ -40,7 +40,7 @@ export function useTypingIndicator(chatId: string | null, userId: string | null)
   const setTypingStatus = useCallback(async () => {
     if (!chatId || !userId) return;
 
-    // Debounce: Don't update Firestore too frequently
+    // Debounce: Don't update RTDB too frequently
     const now = Date.now();
     const timeSinceLastUpdate = now - lastTypingUpdateRef.current;
 
@@ -56,7 +56,7 @@ export function useTypingIndicator(chatId: string | null, userId: string | null)
       return;
     }
 
-    // Update Firestore
+    // Update RTDB (with auto-disconnect configured)
     await setUserTyping(chatId, userId);
     isTypingRef.current = true;
     lastTypingUpdateRef.current = now;

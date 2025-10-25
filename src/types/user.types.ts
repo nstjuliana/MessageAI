@@ -57,6 +57,7 @@ export interface PublicUserProfile {
   username: string;
   displayName: string;
   avatarUrl?: string;
+  avatarLocalPath?: string; // Local file path to cached avatar image
   bio?: string;
   presence: UserPresence;
   lastSeen: number;

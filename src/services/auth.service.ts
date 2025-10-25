@@ -18,6 +18,7 @@ import {
     updateProfile,
     type Unsubscribe,
 } from 'firebase/auth';
+import { setUserOffline } from './presence.service';
 
 /**
  * Sign up a new user with email and password
@@ -53,20 +54,29 @@ export async function signIn(email: string, password: string): Promise<FirebaseU
 
 /**
  * Sign out the current user
+ * 
+ * NOTE: We update presence to offline in RTDB before signing out.
+ * Using RTDB with a timeout ensures:
+ * - Fast logout (max 500ms, typically 100-200ms with RTDB)
+ * - Presence update when network is available
+ * - Guaranteed completion even when offline
+ * - onDisconnect is also cancelled to prevent ghost offline updates
  */
 export async function logOut(): Promise<void> {
   try {
-    // IMPORTANT: Update presence to offline BEFORE signing out
-    // Otherwise, Firestore will reject the update because user is already logged out
     const currentUser = auth.currentUser;
+    
+    // Update presence in RTDB with a timeout
     if (currentUser) {
-      // Import updatePresence dynamically to avoid circular dependencies
-      const { updatePresence } = await import('./user.service');
       try {
-        await updatePresence(currentUser.uid, 'offline');
-      } catch (presenceError) {
+        // Race between presence update and 500ms timeout (RTDB is faster than Firestore)
+        await Promise.race([
+          setUserOffline(currentUser.uid),
+          new Promise((resolve) => setTimeout(resolve, 500)) // 500ms max
+        ]);
+      } catch (error) {
         // Log but don't throw - we still want to sign out even if presence update fails
-        console.warn('Failed to update presence on logout:', presenceError);
+        console.warn('Failed to update presence on logout:', error);
       }
     }
     

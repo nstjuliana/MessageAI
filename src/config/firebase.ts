@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
+import { getDatabase } from 'firebase/database';
 import { getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
@@ -18,6 +19,7 @@ const firebaseConfig = {
   storageBucket: getEnvVar('EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET', 'firebaseStorageBucket'),
   messagingSenderId: getEnvVar('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID', 'firebaseMessagingSenderId'),
   appId: getEnvVar('EXPO_PUBLIC_FIREBASE_APP_ID', 'firebaseAppId'),
+  databaseURL: getEnvVar('EXPO_PUBLIC_FIREBASE_DATABASE_URL', 'firebaseDatabaseURL'),
 };
 
 // Initialize Firebase
@@ -31,11 +33,24 @@ const auth = getAuth(app);
 // Initialize Firestore
 const db = getFirestore(app);
 
+// Initialize Realtime Database (for presence and typing indicators)
+// Note: Requires EXPO_PUBLIC_FIREBASE_DATABASE_URL to be set
+let rtdb: any = null;
+try {
+  if (firebaseConfig.databaseURL) {
+    rtdb = getDatabase(app);
+  } else {
+    console.warn('⚠️ Firebase Realtime Database URL not configured. Presence tracking disabled.');
+  }
+} catch (error) {
+  console.error('Failed to initialize Realtime Database:', error);
+}
+
 // Initialize Storage
 const storage = getStorage(app);
 
 // Initialize Cloud Functions
 const functions = getFunctions(app);
 
-export { app, auth, db, functions, storage };
+export { app, auth, db, functions, rtdb, storage };
 

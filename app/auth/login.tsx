@@ -175,7 +175,23 @@ export default function LoginScreen() {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>Test User Login</Text>
+              <Text style={styles.buttonText}>Login as Test User</Text>
+            )}
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.button,
+              loading && styles.buttonDisabled,
+              pressed && !loading && styles.buttonPressed,
+            ]}
+            onPress={() => void signIn('nstjuliana@gmail.com', 'as1111').then(() => router.replace('/(authenticated)/chats'))}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Login as Nstjuliana</Text>
             )}
           </Pressable>
 
