@@ -45,9 +45,7 @@ A powerful messaging application with AI capabilities, built with React Native a
    ```
 
    Then edit `.env` and add your configuration values:
-   - Firebase configuration (from your Firebase project settings)
    - OpenAI API key (required)
-   - n8n webhook URL (optional, for RAG agent features)
 
 4. Start the app
 
