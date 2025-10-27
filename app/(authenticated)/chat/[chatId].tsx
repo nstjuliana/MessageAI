@@ -6,18 +6,18 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 import GroupAvatar from '@/components/GroupAvatar';
@@ -27,18 +27,18 @@ import { useNotifications } from '@/contexts/NotificationContext';
 import { useProfileCache } from '@/contexts/ProfileCacheContext';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 import {
-  getChatFromSQLite,
-  getLastSyncedTimestamp,
-  MESSAGE_AI_USER_ID,
-  onMessageStatusUpdatesSnapshot,
-  onNewMessagesSnapshot
+    getChatFromSQLite,
+    getLastSyncedTimestamp,
+    MESSAGE_AI_USER_ID,
+    onMessageStatusUpdatesSnapshot,
+    onNewMessagesSnapshot
 } from '@/services/chat.service';
 import {
-  getMessagesFromSQLite,
-  markAllMessagesAsRead,
-  markMessageAsRead,
-  saveMessageTranslation,
-  sendMessageOptimistic
+    getMessagesFromSQLite,
+    markAllMessagesAsRead,
+    markMessageAsRead,
+    saveMessageTranslation,
+    sendMessageOptimistic
 } from '@/services/message.service';
 import { translateMessage } from '@/services/openai.service';
 import { onUsersPresenceChange } from '@/services/presence.service';
@@ -482,8 +482,9 @@ export default function ChatScreen() {
     clearTyping();
 
     try {
-      // Check if this is MessageAI Bot chat
-      const isMessageAIChat = chat?.participantIds.includes(MESSAGE_AI_USER_ID);
+      // Check if this is MessageAI Bot DM (not group chats)
+      const isMessageAIChat = chat?.type === 'dm' && 
+                              chat?.participantIds.includes(MESSAGE_AI_USER_ID);
       
       // Send user message with optimistic UI
       const message = await sendMessageOptimistic(

@@ -6,15 +6,15 @@
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Image,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 import ChatSummaryModal from '@/components/ChatSummaryModal';
@@ -66,16 +66,17 @@ export default function ChatsScreen() {
     setLoading(true);
 
     const unsubscribe = onUserChatsSnapshot(user.uid, async (updatedChats) => {
-      // Sort chats: MessageAI Bot always at top, others by lastMessageAt
+      // Sort chats: MessageAI Bot DM at top, all others by most recent
       const sortedChats = updatedChats.sort((a, b) => {
-        const aIsMessageAI = a.participantIds.includes(MESSAGE_AI_USER_ID);
-        const bIsMessageAI = b.participantIds.includes(MESSAGE_AI_USER_ID);
+        // Check if chat is MessageAI Bot DM (not group chats)
+        const aIsMessageAI = a.type === 'dm' && a.participantIds.includes(MESSAGE_AI_USER_ID);
+        const bIsMessageAI = b.type === 'dm' && b.participantIds.includes(MESSAGE_AI_USER_ID);
         
-        // MessageAI Bot always first
+        // MessageAI Bot DM always first
         if (aIsMessageAI && !bIsMessageAI) return -1;
         if (!aIsMessageAI && bIsMessageAI) return 1;
         
-        // For all others, sort by lastMessageAt (most recent first)
+        // For all others (including groups), sort by lastMessageAt DESC
         return (b.lastMessageAt || 0) - (a.lastMessageAt || 0);
       });
       
