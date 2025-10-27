@@ -446,7 +446,7 @@ export default function ChatsScreen() {
   if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color="#6366F1" />
         <Text style={styles.loadingText}>Loading chats...</Text>
       </View>
     );
@@ -514,7 +514,7 @@ export default function ChatsScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor="#007AFF"
+            tintColor="#6366F1"
           />
         }
       />
@@ -555,18 +555,18 @@ export default function ChatsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#666',
+    color: '#94A3B8',
   },
   header: {
     flexDirection: 'row',
@@ -576,8 +576,8 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    backgroundColor: '#fff',
+    borderBottomColor: '#1E293B',
+    backgroundColor: '#0F172A',
   },
   headerLeft: {
     flex: 1,
@@ -586,7 +586,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#000',
+    color: '#FFFFFF',
   },
   profileContainer: {
     alignItems: 'center',
@@ -602,7 +602,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -635,14 +635,14 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     fontSize: 16,
-    color: '#007AFF',
+    color: '#6366F1',
   },
   chatItem: {
     flexDirection: 'row',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    backgroundColor: '#fff',
+    borderBottomColor: '#1E293B',
+    backgroundColor: '#0F172A',
   },
   avatarContainer: {
     position: 'relative',
@@ -652,7 +652,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -689,17 +689,17 @@ const styles = StyleSheet.create({
   chatTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#000',
+    color: '#FFFFFF',
     flex: 1,
   },
   chatTime: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: '#64748B',
     marginLeft: 8,
   },
   chatSubtitle: {
     fontSize: 15,
-    color: '#8E8E93',
+    color: '#64748B',
   },
   emptyContainer: {
     flexGrow: 1,
@@ -717,12 +717,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 24,
     fontWeight: '600',
-    color: '#000',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    color: '#8E8E93',
+    color: '#64748B',
     textAlign: 'center',
   },
   fab: {
@@ -732,10 +732,10 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#6366F1',
     shadowOffset: {
       width: 0,
       height: 4,

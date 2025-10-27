@@ -1,22 +1,17 @@
 import { Redirect, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { httpsCallable } from 'firebase/functions';
-import { useState } from 'react';
-import { ActivityIndicator, Button, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { auth, db, functions } from '@/config/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function HomeScreen() {
   const { user, loading } = useAuth();
-  const [testing, setTesting] = useState(false);
-  const [result, setResult] = useState<string>('');
 
   // Show loading while checking auth state
   if (loading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color="#6366F1" />
       </View>
     );
   }
@@ -26,110 +21,40 @@ export default function HomeScreen() {
     return <Redirect href="/(authenticated)/chats" />;
   }
 
-  const testFirebaseConnection = async () => {
-    setTesting(true);
-    setResult('');
-
-    try {
-      // Test 1: Check Firebase initialization
-      if (!auth || !db) {
-        throw new Error('Firebase not initialized');
-      }
-
-      // Test 2: Get current auth state
-      const currentUser = auth.currentUser;
-      
-      // Test 3: Try to access Firestore (just checking connection, not reading data)
-      const firestoreApp = db.app;
-
-      setResult(
-        '✅ Firebase Connected!\n\n' +
-        `Auth: ${auth ? 'Initialized' : 'Failed'}\n` +
-        `Firestore: ${db ? 'Initialized' : 'Failed'}\n` +
-        `Functions: ${functions ? 'Initialized' : 'Failed'}\n` +
-        `User: ${currentUser ? currentUser.uid : 'Not logged in'}\n` +
-        `App Name: ${firestoreApp.name}`
-      );
-    } catch (error: any) {
-      setResult(`❌ Firebase Error:\n\n${error.message}`);
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  const testCloudFunction = async () => {
-    setTesting(true);
-    setResult('');
-
-    try {
-      // Call the Cloud Function
-      const testFunc = httpsCallable(functions, 'testFunction');
-      const response = await testFunc({ name: 'MessageAI User' });
-      
-      const data = response.data as any;
-      
-      setResult(
-        '✅ Cloud Function Success!\n\n' +
-        `Message: ${data.message}\n\n` +
-        `Timestamp: ${data.timestamp}\n` +
-        `Success: ${data.success}`
-      );
-    } catch (error: any) {
-      setResult(`❌ Cloud Function Error:\n\n${error.message}`);
-    } finally {
-      setTesting(false);
-    }
-  };
-
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>WhatsEpp</Text>
-      
-      <View style={styles.authSection}>
-        <Button
-          title="Sign Up"
-          onPress={() => router.push('/auth/signup')}
-          color="#007AFF"
-        />
-        
-        <View style={styles.buttonSpacer} />
-        
-        <Button
-          title="Log In"
-          onPress={() => router.push('/auth/login')}
-          color="#34C759"
-        />
-      </View>
-      
-      <View style={styles.divider} />
-      
-      <View style={styles.testSection}>
-        <Text style={styles.testTitle}>Testing Tools</Text>
-        
-        <Button
-          title="Test Firebase Connection"
-          onPress={testFirebaseConnection}
-          disabled={testing}
-        />
-        
-        <View style={styles.buttonSpacer} />
-        
-        <Button
-          title="Test Cloud Function"
-          onPress={testCloudFunction}
-          disabled={testing}
-          color="#34C759"
-        />
-        
-        {testing && (
-          <ActivityIndicator size="large" color="#007AFF" style={styles.loader} />
-        )}
-        
-        {result && (
-          <View style={styles.resultBox}>
-            <Text style={styles.resultText}>{result}</Text>
-          </View>
-        )}
+      <View style={styles.content}>
+        {/* Logo */}
+        <View style={styles.logoContainer}>
+          <Image 
+            source={require('@/assets/images/icon.png')} 
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </View>
+
+        {/* Title and tagline */}
+        <Text style={styles.title}>MessageAI</Text>
+        <Text style={styles.tagline}>Connect • Chat • Collaborate</Text>
+
+        {/* Buttons */}
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity 
+            style={styles.primaryButton}
+            onPress={() => router.push('/auth/signup')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.primaryButtonText}>Get Started</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.secondaryButton}
+            onPress={() => router.push('/auth/login')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.secondaryButtonText}>Sign In</Text>
+          </TouchableOpacity>
+        </View>
       </View>
       
       <StatusBar style="auto" />
@@ -140,61 +65,89 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
+  },
+  content: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    padding: 24,
+  },
+  logoContainer: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: '#1E293B',
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 32,
+  },
+  logo: {
+    width: 120,
+    height: 120,
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
+    fontSize: 42,
+    fontWeight: '700',
+    color: '#FFFFFF',
     marginBottom: 8,
+    letterSpacing: -0.5,
   },
-  subtitle: {
-    fontSize: 18,
-    color: '#666',
-    marginBottom: 40,
-  },
-  authSection: {
-    width: '100%',
-    maxWidth: 400,
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  divider: {
-    width: '80%',
-    height: 1,
-    backgroundColor: '#ddd',
-    marginVertical: 20,
-  },
-  testSection: {
-    width: '100%',
-    maxWidth: 400,
-    alignItems: 'center',
-  },
-  testTitle: {
+  tagline: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 16,
+    color: '#94A3B8',
+    marginBottom: 48,
+    fontWeight: '500',
   },
-  buttonSpacer: {
-    height: 12,
-  },
-  loader: {
-    marginTop: 20,
-  },
-  resultBox: {
-    marginTop: 20,
-    padding: 15,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
+  buttonContainer: {
     width: '100%',
+    maxWidth: 320,
+    gap: 16,
   },
-  resultText: {
-    fontSize: 14,
-    fontFamily: 'monospace',
-    color: '#333',
+  primaryButton: {
+    backgroundColor: '#6366F1',
+    paddingVertical: 18,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  secondaryButton: {
+    backgroundColor: '#1E293B',
+    paddingVertical: 18,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#334155',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  secondaryButtonText: {
+    color: '#E2E8F0',
+    fontSize: 18,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
 });
 

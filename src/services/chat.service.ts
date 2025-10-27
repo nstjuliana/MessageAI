@@ -16,6 +16,7 @@ import {
     query,
     serverTimestamp,
     setDoc,
+    Timestamp,
     updateDoc,
     where,
     type Unsubscribe,
@@ -487,6 +488,8 @@ export function onUserChatsSnapshot(
                     edited: data.edited || false,
                     editedAt: data.editedAt?.toMillis?.() || data.editedAt,
                     createdAt: data.createdAt?.toMillis?.() || data.createdAt || Date.now(),
+                    deliveredTo: data.deliveredTo || [],
+                    readBy: data.readBy || [],
                   };
                   
                   // Sync to SQLite with media caching
@@ -1081,9 +1084,13 @@ export function onNewMessagesSnapshot(
 ): Unsubscribe {
   try {
     const messagesRef = collection(db, CHATS_COLLECTION, chatId, MESSAGES_COLLECTION);
+    
+    // Convert Unix timestamp to Firestore Timestamp
+    const firestoreTimestamp = Timestamp.fromMillis(lastSyncedTimestamp);
+    
     const messagesQuery = query(
       messagesRef, 
-      where('createdAt', '>', lastSyncedTimestamp),
+      where('createdAt', '>', firestoreTimestamp),
       orderBy('createdAt', 'asc')
     );
 
@@ -1106,6 +1113,8 @@ export function onNewMessagesSnapshot(
             edited: data.edited || false,
             editedAt: data.editedAt?.toMillis?.() || data.editedAt,
             createdAt: data.createdAt?.toMillis?.() || data.createdAt || Date.now(),
+            deliveredTo: data.deliveredTo || [],
+            readBy: data.readBy || [],
           };
             console.log(`📩 New message: ${message.id}`);
             callback(message);
@@ -1172,6 +1181,8 @@ export function onMessageStatusUpdatesSnapshot(
               edited: data.edited || false,
               editedAt: data.editedAt?.toMillis?.() || data.editedAt,
               createdAt: data.createdAt?.toMillis?.() || data.createdAt || Date.now(),
+              deliveredTo: data.deliveredTo || [],
+              readBy: data.readBy || [],
             };
             console.log(`📝 Status update: ${message.id} → ${message.status}`);
             callback(message);

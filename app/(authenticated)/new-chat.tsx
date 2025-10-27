@@ -5,14 +5,14 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  FlatList,
-  Image,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    FlatList,
+    Image,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -208,7 +208,7 @@ export default function NewChatScreen() {
     if (loading) {
       return (
         <View style={styles.emptyState}>
-          <ActivityIndicator size="large" color="#007AFF" />
+          <ActivityIndicator size="large" color="#6366F1" />
           <Text style={styles.emptyText}>Searching...</Text>
         </View>
       );
@@ -258,6 +258,7 @@ export default function NewChatScreen() {
         <TextInput
           style={styles.searchInput}
           placeholder="Search by name or @username..."
+          placeholderTextColor="#64748B"
           value={searchTerm}
           onChangeText={handleSearch}
           autoCapitalize="none"
@@ -295,7 +296,7 @@ export default function NewChatScreen() {
       {creating && (
         <View style={styles.creatingOverlay}>
           <View style={styles.creatingCard}>
-            <ActivityIndicator size="large" color="#007AFF" />
+            <ActivityIndicator size="large" color="#6366F1" />
             <Text style={styles.creatingText}>Creating chat...</Text>
           </View>
         </View>
@@ -307,7 +308,7 @@ export default function NewChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
   },
   header: {
     flexDirection: 'row',
@@ -317,27 +318,27 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    backgroundColor: '#fff',
+    borderBottomColor: '#1E293B',
+    backgroundColor: '#0F172A',
   },
   backButton: {
     padding: 8,
   },
   backText: {
     fontSize: 18,
-    color: '#007AFF',
+    color: '#6366F1',
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#000',
+    color: '#FFFFFF',
   },
   headerButton: {
     padding: 8,
   },
   headerButtonText: {
     fontSize: 16,
-    color: '#007AFF',
+    color: '#6366F1',
     fontWeight: '500',
   },
   searchContainer: {
@@ -345,7 +346,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     margin: 16,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#1E293B',
     borderRadius: 10,
   },
   searchIcon: {
@@ -355,14 +356,14 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: '#000',
+    color: '#FFFFFF',
   },
   userItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#1E293B',
   },
   avatarWrapper: {
     position: 'relative',
@@ -374,7 +375,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -404,21 +405,21 @@ const styles = StyleSheet.create({
   displayName: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#000',
+    color: '#FFFFFF',
     marginBottom: 2,
   },
   username: {
     fontSize: 14,
-    color: '#007AFF',
+    color: '#6366F1',
     marginBottom: 2,
   },
   bio: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: '#64748B',
   },
   chevron: {
     fontSize: 24,
-    color: '#C7C7CC',
+    color: '#64748B',
   },
   emptyContainer: {
     flexGrow: 1,
@@ -436,12 +437,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 24,
     fontWeight: '600',
-    color: '#000',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    color: '#8E8E93',
+    color: '#64748B',
     textAlign: 'center',
   },
   creatingOverlay: {
@@ -451,7 +452,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   creatingCard: {
-    backgroundColor: '#fff',
+    backgroundColor: '#1E293B',
     padding: 32,
     borderRadius: 16,
     alignItems: 'center',
@@ -459,20 +460,20 @@ const styles = StyleSheet.create({
   creatingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#000',
+    color: '#FFFFFF',
   },
   checkbox: {
     width: 24,
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#007AFF',
+    borderColor: '#6366F1',
     marginRight: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
   checkboxSelected: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
   },
   checkmark: {
     color: '#fff',
@@ -481,12 +482,12 @@ const styles = StyleSheet.create({
   },
   nextButtonContainer: {
     padding: 16,
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    borderTopColor: '#1E293B',
   },
   nextButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',

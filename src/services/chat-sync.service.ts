@@ -98,6 +98,8 @@ async function syncChatMessages(chatId: string): Promise<number> {
         edited: data.edited || false,
         editedAt: data.editedAt?.toMillis?.() || data.editedAt,
         createdAt: data.createdAt?.toMillis?.() || data.createdAt || Date.now(),
+        deliveredTo: data.deliveredTo || [],
+        readBy: data.readBy || [],
       };
       
       messages.push(message);
@@ -114,7 +116,17 @@ async function syncChatMessages(chatId: string): Promise<number> {
     console.log(`✅ Synced ${messages.length} messages to SQLite`);
     
     return messages.length;
-  } catch (error) {
+  } catch (error: any) {
+    const errorCode = error?.code || '';
+    const errorMessage = error?.message || '';
+    
+    // Handle permission errors gracefully - user might not have access to this chat anymore
+    if (errorCode === 'permission-denied' || 
+        errorMessage.includes('Missing or insufficient permissions')) {
+      console.log(`⚠️ Permission denied for chat ${chatId} - user may not be a participant`);
+      return 0; // Return 0 to indicate no messages synced, but don't fail the entire sync
+    }
+    
     console.error(`❌ Failed to sync messages for chat ${chatId}:`, error);
     throw error;
   }
@@ -177,7 +189,11 @@ export async function preloadRecentChats(userId: string): Promise<void> {
         // Mark as synced
         await updateChatSyncStatus(chatId, 'synced', messageCount);
         
-        console.log(`✅ Preloaded chat: ${chatId} (${messageCount} messages)`);
+        if (messageCount === 0) {
+          console.log(`⚠️ Skipped chat ${chatId} (no access or no messages)`);
+        } else {
+          console.log(`✅ Preloaded chat: ${chatId} (${messageCount} messages)`);
+        }
       } catch (error) {
         console.error(`❌ Failed to preload chat ${chatId}:`, error);
         await updateChatSyncStatus(chatId, 'failed');
@@ -237,10 +253,14 @@ export async function startBackgroundSync(): Promise<void> {
         // Sync messages
         const messageCount = await syncChatMessages(chatId);
         
-        // Mark as synced
+        // Mark as synced (even if 0 messages due to permission error)
         await updateChatSyncStatus(chatId, 'synced', messageCount);
         
-        console.log(`✅ Background synced: ${chatId} (${messageCount} messages)`);
+        if (messageCount === 0) {
+          console.log(`⚠️ Skipped chat ${chatId} (no access or no messages)`);
+        } else {
+          console.log(`✅ Background synced: ${chatId} (${messageCount} messages)`);
+        }
         
         // Delay before next chat
         if (i < chatIds.length - 1) {

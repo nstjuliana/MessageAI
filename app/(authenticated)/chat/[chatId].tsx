@@ -199,6 +199,18 @@ const MessageItem = React.memo(({
 
 MessageItem.displayName = 'MessageItem';
 
+// Helper function to sort messages by timestamp, with message ID as tiebreaker
+function sortMessagesByTimestamp(messages: Message[]): Message[] {
+  return messages.sort((a, b) => {
+    // Primary sort: timestamp
+    if (a.createdAt !== b.createdAt) {
+      return a.createdAt - b.createdAt;
+    }
+    // Secondary sort: message ID (ensures consistent order for same timestamp)
+    return a.id.localeCompare(b.id);
+  });
+}
+
 export default function ChatScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
   const { user } = useAuth();
@@ -329,7 +341,7 @@ export default function ChatScreen() {
               return prev;
             }
             console.log(`➕ Adding new message ${message.id} to UI`);
-            return [...prev, message].sort((a, b) => a.createdAt - b.createdAt);
+            return sortMessagesByTimestamp([...prev, message]);
           });
           
           // Mark as read if from someone else (chat is open)
@@ -342,12 +354,19 @@ export default function ChatScreen() {
         const unsubscribeStatusUpdates = onMessageStatusUpdatesSnapshot(chatId, async (message) => {
           console.log(`✅ [Local] Status update: ${message.id} → ${message.status}`);
           
-          // Update in UI immediately
-          setMessages(prev => prev.map(m => m.id === message.id ? message : m));
-          setMessageStatuses(prev => ({
-            ...prev,
-            [message.id]: message.status
-          }));
+          // Update in UI immediately with the full message object (includes deliveredTo/readBy arrays)
+          // Re-sort after update to ensure correct order (timestamp might have changed)
+          setMessages(prev => {
+            const updated = prev.map(m => m.id === message.id ? message : m);
+            return sortMessagesByTimestamp(updated);
+          });
+          
+          // Clear any optimistic status override - let getDisplayStatus calculate it based on arrays
+          setMessageStatuses(prev => {
+            const next = { ...prev };
+            delete next[message.id];
+            return next;
+          });
         });
         
         unsubscribeMessages = () => {
@@ -501,7 +520,11 @@ export default function ChatScreen() {
       );
       
       // Add message to UI immediately (optimistic)
-      setMessages(prev => [...prev, message]);
+      setMessages(prev => {
+        const sorted = sortMessagesByTimestamp([...prev, message]);
+        console.log(`📝 Sorted messages: ${sorted.length} total, newest timestamp: ${new Date(sorted[sorted.length - 1]?.createdAt).toISOString()}`);
+        return sorted;
+      });
       
       // If this is MessageAI Bot chat, get RAG response
       if (isMessageAIChat) {
@@ -525,7 +548,7 @@ export default function ChatScreen() {
           );
           
           // Add bot message to UI
-          setMessages(prev => [...prev, botMessage]);
+          setMessages(prev => sortMessagesByTimestamp([...prev, botMessage]));
           console.log('✅ MessageAI Bot response sent');
         } catch (error) {
           console.error('❌ Error getting RAG response:', error);
@@ -542,7 +565,7 @@ export default function ChatScreen() {
             }
           );
           
-          setMessages(prev => [...prev, errorMessage]);
+          setMessages(prev => sortMessagesByTimestamp([...prev, errorMessage]));
         }
       }
     } catch (error) {
@@ -693,12 +716,10 @@ export default function ChatScreen() {
   };
 
   const renderEmptyState = () => (
-    <View style={{ transform: [{ scaleY: -1 }] }}>
-      <View style={styles.emptyState}>
-        <Text style={styles.emptyEmoji}>💬</Text>
-        <Text style={styles.emptyTitle}>No messages yet</Text>
-        <Text style={styles.emptyText}>Send a message to start the conversation</Text>
-      </View>
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyEmoji}>💬</Text>
+      <Text style={styles.emptyTitle}>No messages yet</Text>
+      <Text style={styles.emptyText}>Send a message to start the conversation</Text>
     </View>
   );
 
@@ -799,7 +820,7 @@ export default function ChatScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color="#6366F1" />
         <Text style={styles.loadingText}>Loading chat...</Text>
       </View>
     );
@@ -891,40 +912,43 @@ export default function ChatScreen() {
         >
           {/* Message List Container - Takes full available space */}
           <View style={styles.messageListContainer}>
-        <FlatList
-        ref={flatListRef}
-        data={[...messages].reverse()}
-        renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={[
-          messages.length === 0 ? styles.emptyContainer : styles.messageList,
-          { minHeight: '100%' } // Ensure minimum height for scrolling
-        ]}
-        ListEmptyComponent={renderEmptyState}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor="#007AFF"
+        {messages.length === 0 ? (
+          renderEmptyState()
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={[...messages].reverse()}
+            renderItem={renderMessage}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={[
+              styles.messageList,
+              { minHeight: '100%' } // Ensure minimum height for scrolling
+            ]}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor="#6366F1"
+              />
+            }
+            // Inverted makes newest messages appear at bottom naturally
+            inverted
+            // Track scrolling activity for presence
+            onScroll={resetActivityTimer}
+            scrollEventThrottle={1000}
+            // Enable proper scrolling
+            showsVerticalScrollIndicator={true}
+            bounces={true}
+            // Dismiss keyboard interactively when dragging through it
+            keyboardDismissMode="interactive"
+            // Performance optimizations
+            initialNumToRender={20}
+            maxToRenderPerBatch={10}
+            windowSize={21}
+            removeClippedSubviews={Platform.OS === 'android'}
+            updateCellsBatchingPeriod={50}
           />
-        }
-        // Inverted makes newest messages appear at bottom naturally
-        inverted
-        // Track scrolling activity for presence
-        onScroll={resetActivityTimer}
-        scrollEventThrottle={1000}
-        // Enable proper scrolling
-        showsVerticalScrollIndicator={true}
-        bounces={true}
-        // Dismiss keyboard interactively when dragging through it
-        keyboardDismissMode="interactive"
-        // Performance optimizations
-        initialNumToRender={20}
-        maxToRenderPerBatch={10}
-        windowSize={21}
-        removeClippedSubviews={Platform.OS === 'android'}
-        updateCellsBatchingPeriod={50}
-        />
+        )}
       </View>
 
       {/* Typing Indicator */}
@@ -941,6 +965,7 @@ export default function ChatScreen() {
         <TextInput
           style={styles.input}
           placeholder="Type a message..."
+          placeholderTextColor="#64748B"
           value={messageText}
           onChangeText={(text) => {
             setMessageText(text);
@@ -972,18 +997,18 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F0F2F5',
+    backgroundColor: '#0F172A',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F0F2F5',
+    backgroundColor: '#0F172A',
   },
   loadingText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#555',
+    color: '#94A3B8',
   },
   header: {
     flexDirection: 'row',
@@ -992,9 +1017,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 12,
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#1E293B',
   },
   backButton: {
     padding: 8,
@@ -1002,7 +1027,7 @@ const styles = StyleSheet.create({
   },
   backText: {
     fontSize: 18,
-    color: '#007AFF',
+    color: '#6366F1',
   },
   headerInfo: {
     flex: 1,
@@ -1022,7 +1047,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -1049,7 +1074,7 @@ const styles = StyleSheet.create({
   headerName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#000',
+    color: '#FFFFFF',
     marginTop: 4,
   },
   headerTextContainer: {
@@ -1058,11 +1083,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#000',
+    color: '#FFFFFF',
   },
   headerSubtitle: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#64748B',
     marginTop: 2,
   },
   settingsButton: {
@@ -1081,12 +1106,8 @@ const styles = StyleSheet.create({
   messageListContainer: {
     flex: 1, // Take up all available space between header and input
   },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   emptyState: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
@@ -1098,12 +1119,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#000',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    color: '#8E8E93',
+    color: '#64748B',
     textAlign: 'center',
   },
   messageContainer: {
@@ -1124,7 +1145,7 @@ const styles = StyleSheet.create({
   },
   systemMessageText: {
     fontSize: 13,
-    color: '#8E8E93',
+    color: '#64748B',
     textAlign: 'center',
     fontStyle: 'italic',
   },
@@ -1132,7 +1153,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
@@ -1149,7 +1170,7 @@ const styles = StyleSheet.create({
   },
   senderName: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#64748B',
     marginBottom: 4,
     marginLeft: 12,
   },
@@ -1161,12 +1182,12 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   sentBubble: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     alignSelf: 'flex-end',
     borderBottomRightRadius: 4,
   },
   receivedBubble: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#1E293B',
     alignSelf: 'flex-start',
     borderBottomLeftRadius: 4,
   },
@@ -1178,7 +1199,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   receivedText: {
-    color: '#000',
+    color: '#FFFFFF',
   },
   messageFooter: {
     flexDirection: 'row',
@@ -1194,7 +1215,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.7)',
   },
   receivedTimestamp: {
-    color: '#8E8E93',
+    color: '#64748B',
   },
   statusIndicator: {
     fontSize: 11,
@@ -1226,11 +1247,11 @@ const styles = StyleSheet.create({
   typingIndicator: {
     paddingHorizontal: 20,
     paddingVertical: 8,
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
   },
   typingText: {
     fontSize: 13,
-    color: '#8E8E93',
+    color: '#64748B',
     fontStyle: 'italic',
   },
   inputContainer: {
@@ -1239,26 +1260,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 50, // Extra bottom padding for better spacing
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: '#1E293B',
   },
   input: {
     flex: 1,
     minHeight: 40,
     maxHeight: 100,
-    backgroundColor: '#F0F2F5',
+    backgroundColor: '#1E293B',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
     fontSize: 16,
     marginRight: 12,
+    color: '#FFFFFF',
   },
   sendButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1292,7 +1314,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.7)',
   },
   receivedTranslationIndicatorText: {
-    color: '#8E8E93',
+    color: '#64748B',
   },
 });
 

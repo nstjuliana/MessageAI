@@ -15,12 +15,12 @@ import { executeStatement, getDatabase } from '@/database/database';
 import type { CreateMessageData, Message, MessageStatus } from '@/types/chat.types';
 import NetInfo from '@react-native-community/netinfo';
 import {
-  arrayUnion,
-  collection,
-  doc,
-  serverTimestamp,
-  setDoc,
-  updateDoc
+    arrayUnion,
+    collection,
+    doc,
+    serverTimestamp,
+    setDoc,
+    updateDoc
 } from 'firebase/firestore';
 
 import { cacheMedia, getCachedMediaPath } from './media-cache.service';
@@ -493,7 +493,7 @@ export async function getMessagesFromSQLite(
         translatedText, translatedLanguage, translatedAt
       FROM messages
       WHERE chatId = ?
-      ORDER BY createdAt DESC
+      ORDER BY createdAt DESC, id DESC
       LIMIT ?
     `;
     
@@ -861,7 +861,7 @@ export async function getAllMessagesForChat(chatId: string): Promise<Message[]> 
         translatedText, translatedLanguage, translatedAt
       FROM messages
       WHERE chatId = ?
-      ORDER BY createdAt ASC
+      ORDER BY createdAt ASC, id ASC
     `;
     
     const result = await sqlite.getAllAsync<any>(sql, [chatId]);

@@ -297,7 +297,7 @@ export default function AddMembersScreen() {
     if (searching) {
       return (
         <View style={styles.emptyState}>
-          <ActivityIndicator size="large" color="#007AFF" />
+          <ActivityIndicator size="large" color="#6366F1" />
           <Text style={styles.emptyText}>Searching...</Text>
         </View>
       );
@@ -327,7 +327,7 @@ export default function AddMembersScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color="#6366F1" />
         <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
@@ -354,6 +354,7 @@ export default function AddMembersScreen() {
         <TextInput
           style={styles.searchInput}
           placeholder="Search by name or @username..."
+          placeholderTextColor="#64748B"
           value={searchTerm}
           onChangeText={handleSearch}
           autoCapitalize="none"
@@ -429,7 +430,7 @@ export default function AddMembersScreen() {
       {processing && (
         <View style={styles.processingOverlay}>
           <View style={styles.processingCard}>
-            <ActivityIndicator size="large" color="#007AFF" />
+            <ActivityIndicator size="large" color="#6366F1" />
             <Text style={styles.processingText}>Processing...</Text>
           </View>
         </View>
@@ -441,18 +442,18 @@ export default function AddMembersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#8E8E93',
+    color: '#64748B',
   },
   header: {
     flexDirection: 'row',
@@ -462,20 +463,20 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'ios' ? 60 : 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    backgroundColor: '#fff',
+    borderBottomColor: '#1E293B',
+    backgroundColor: '#0F172A',
   },
   backButton: {
     padding: 8,
   },
   backText: {
     fontSize: 18,
-    color: '#007AFF',
+    color: '#6366F1',
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#000',
+    color: '#FFFFFF',
   },
   placeholder: {
     width: 40,
@@ -485,7 +486,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     margin: 16,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#1E293B',
     borderRadius: 10,
   },
   searchIcon: {
@@ -495,27 +496,27 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: '#000',
+    color: '#FFFFFF',
   },
   userItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#1E293B',
   },
   checkbox: {
     width: 24,
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#007AFF',
+    borderColor: '#6366F1',
     marginRight: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
   checkboxSelected: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
   },
   checkmark: {
     color: '#fff',
@@ -532,7 +533,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -562,12 +563,12 @@ const styles = StyleSheet.create({
   displayName: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#000',
+    color: '#FFFFFF',
     marginBottom: 2,
   },
   username: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: '#64748B',
   },
   emptyContainer: {
     flex: 1,
@@ -585,22 +586,22 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#000',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    color: '#8E8E93',
+    color: '#64748B',
     textAlign: 'center',
   },
   nextButtonContainer: {
     padding: 16,
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    borderTopColor: '#1E293B',
   },
   nextButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
@@ -617,7 +618,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: '#1E293B',
     borderRadius: 16,
     padding: 24,
     width: '80%',
@@ -626,12 +627,12 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#000',
+    color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 24,
   },
   modalButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: 'center',
@@ -643,10 +644,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   modalCancelButton: {
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#334155',
   },
   modalCancelText: {
-    color: '#000',
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -657,7 +658,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   processingCard: {
-    backgroundColor: '#fff',
+    backgroundColor: '#1E293B',
     padding: 32,
     borderRadius: 16,
     alignItems: 'center',
@@ -665,7 +666,7 @@ const styles = StyleSheet.create({
   processingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#000',
+    color: '#FFFFFF',
   },
 });
 

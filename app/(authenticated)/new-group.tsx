@@ -138,7 +138,7 @@ export default function NewGroupScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color="#6366F1" />
         <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
@@ -163,6 +163,7 @@ export default function NewGroupScreen() {
           value={groupName}
           onChangeText={setGroupName}
           placeholder="Enter group name..."
+          placeholderTextColor="#64748B"
           maxLength={50}
         />
       </View>
@@ -216,18 +217,18 @@ export default function NewGroupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#8E8E93',
+    color: '#64748B',
   },
   header: {
     flexDirection: 'row',
@@ -237,20 +238,20 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    backgroundColor: '#fff',
+    borderBottomColor: '#1E293B',
+    backgroundColor: '#0F172A',
   },
   backButton: {
     padding: 8,
   },
   backText: {
     fontSize: 18,
-    color: '#007AFF',
+    color: '#6366F1',
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#000',
+    color: '#FFFFFF',
   },
   placeholder: {
     width: 40,
@@ -261,16 +262,16 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#8E8E93',
+    color: '#64748B',
     marginBottom: 12,
     textTransform: 'uppercase',
   },
   groupNameInput: {
     fontSize: 16,
     padding: 12,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#1E293B',
     borderRadius: 10,
-    color: '#000',
+    color: '#FFFFFF',
   },
   userList: {
     maxHeight: 300,
@@ -280,13 +281,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#1E293B',
   },
   avatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -307,16 +308,16 @@ const styles = StyleSheet.create({
   displayName: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#000',
+    color: '#FFFFFF',
     marginBottom: 2,
   },
   username: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: '#64748B',
   },
   adminBadge: {
     fontSize: 12,
-    color: '#007AFF',
+    color: '#6366F1',
     fontWeight: '600',
   },
   removeButton: {
@@ -335,10 +336,10 @@ const styles = StyleSheet.create({
   footer: {
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    borderTopColor: '#1E293B',
   },
   createButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
