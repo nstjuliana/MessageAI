@@ -6,15 +6,15 @@
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Image,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Image,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 import ChatSummaryModal from '@/components/ChatSummaryModal';
@@ -22,7 +22,7 @@ import { useActivity } from '@/contexts/ActivityContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProfileCache } from '@/contexts/ProfileCacheContext';
 import { useUser } from '@/contexts/UserContext';
-import { onUserChatsSnapshot } from '@/services/chat.service';
+import { MESSAGE_AI_USER_ID, onUserChatsSnapshot } from '@/services/chat.service';
 import { getAllMessagesForChat, markMessageAsDelivered } from '@/services/message.service';
 import { summarizeChat } from '@/services/openai.service';
 import { onUserPresenceChange, onUsersPresenceChange } from '@/services/presence.service';
@@ -66,7 +66,20 @@ export default function ChatsScreen() {
     setLoading(true);
 
     const unsubscribe = onUserChatsSnapshot(user.uid, async (updatedChats) => {
-      setChats(updatedChats);
+      // Sort chats: MessageAI Bot always at top, others by lastMessageAt
+      const sortedChats = updatedChats.sort((a, b) => {
+        const aIsMessageAI = a.participantIds.includes(MESSAGE_AI_USER_ID);
+        const bIsMessageAI = b.participantIds.includes(MESSAGE_AI_USER_ID);
+        
+        // MessageAI Bot always first
+        if (aIsMessageAI && !bIsMessageAI) return -1;
+        if (!aIsMessageAI && bIsMessageAI) return 1;
+        
+        // For all others, sort by lastMessageAt (most recent first)
+        return (b.lastMessageAt || 0) - (a.lastMessageAt || 0);
+      });
+      
+      setChats(sortedChats);
       setLoading(false);
       
       // Mark unread messages from others as delivered

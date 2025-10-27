@@ -7,18 +7,18 @@ import { db } from '@/config/firebase';
 import { executeStatement, getDatabase } from '@/database/database';
 import type { Chat, CreateChatData, CreateMessageData, Message } from '@/types/chat.types';
 import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-  where,
-  type Unsubscribe,
+    collection,
+    doc,
+    getDoc,
+    getDocs,
+    onSnapshot,
+    orderBy,
+    query,
+    serverTimestamp,
+    setDoc,
+    updateDoc,
+    where,
+    type Unsubscribe,
 } from 'firebase/firestore';
 import { createSystemMessage, syncMessageToSQLite } from './message.service';
 
@@ -192,8 +192,8 @@ async function ensureMessageAIUserExists(): Promise<void> {
 
     if (!userSnap.exists()) {
       await setDoc(userRef, {
-        displayName: 'MessageAI',
-        bio: 'Your AI messaging assistant',
+        displayName: 'MessageAI Bot',
+        bio: 'Ask me anything about your conversations',
         avatarUrl: '', // You can add a bot avatar URL here later
         presence: 'online',
         lastSeen: serverTimestamp(),
@@ -201,7 +201,7 @@ async function ensureMessageAIUserExists(): Promise<void> {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      console.log('MessageAI system user created');
+      console.log('MessageAI Bot system user created');
     }
   } catch (error) {
     console.error('Error ensuring MessageAI user exists:', error);
@@ -376,15 +376,14 @@ export async function createWelcomeChat(userId: string, displayName: string): Pr
     console.log('Step 3: Sending welcome message...');
     const welcomeText = `👋 Hi ${displayName}! Welcome to MessageAI!
 
-I'm your AI assistant, here to help you get the most out of your messaging experience.
+I'm MessageAI Bot, your intelligent assistant that can answer questions about your conversations.
 
-Here are some things you can do:
-• Start a chat with friends
-• Create group conversations
-• Share photos and media
-• Get AI-powered assistance
+Ask me anything! For example:
+• "When did Amy tell me to come over?"
+• "What did we discuss about the project?"
+• "What plans do I have this weekend?"
 
-Feel free to explore and reach out if you need help! 🚀`;
+I'll search through your messages and give you helpful answers. Try asking me something! 🤖`;
 
     await createMessage({
       chatId: chat.id,

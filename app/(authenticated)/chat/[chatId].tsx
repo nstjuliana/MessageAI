@@ -29,6 +29,7 @@ import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 import {
   getChatFromSQLite,
   getLastSyncedTimestamp,
+  MESSAGE_AI_USER_ID,
   onMessageStatusUpdatesSnapshot,
   onNewMessagesSnapshot
 } from '@/services/chat.service';
@@ -41,6 +42,7 @@ import {
 } from '@/services/message.service';
 import { translateMessage } from '@/services/openai.service';
 import { onUsersPresenceChange } from '@/services/presence.service';
+import { answerQuestion } from '@/services/rag.service';
 import { onTypingStatusChange } from '@/services/typing-rtdb.service';
 import { onUsersProfilesSnapshot } from '@/services/user.service';
 import type { Chat, Message, MessageStatus } from '@/types/chat.types';
@@ -480,7 +482,10 @@ export default function ChatScreen() {
     clearTyping();
 
     try {
-      // Send message with optimistic UI
+      // Check if this is MessageAI Bot chat
+      const isMessageAIChat = chat?.participantIds.includes(MESSAGE_AI_USER_ID);
+      
+      // Send user message with optimistic UI
       const message = await sendMessageOptimistic(
         {
           chatId,
@@ -496,6 +501,49 @@ export default function ChatScreen() {
       
       // Add message to UI immediately (optimistic)
       setMessages(prev => [...prev, message]);
+      
+      // If this is MessageAI Bot chat, get RAG response
+      if (isMessageAIChat) {
+        console.log('🤖 MessageAI Bot chat detected, generating RAG response...');
+        
+        try {
+          // Get answer from RAG service
+          const answer = await answerQuestion(textToSend, user.uid);
+          
+          // Send MessageAI Bot's response
+          const botMessage = await sendMessageOptimistic(
+            {
+              chatId,
+              senderId: MESSAGE_AI_USER_ID,
+              text: answer,
+            },
+            (messageId, status) => {
+              console.log(`Bot message ${messageId} status changed to ${status}`);
+              setMessageStatuses(prev => ({ ...prev, [messageId]: status }));
+            }
+          );
+          
+          // Add bot message to UI
+          setMessages(prev => [...prev, botMessage]);
+          console.log('✅ MessageAI Bot response sent');
+        } catch (error) {
+          console.error('❌ Error getting RAG response:', error);
+          
+          // Send error message from bot
+          const errorMessage = await sendMessageOptimistic(
+            {
+              chatId,
+              senderId: MESSAGE_AI_USER_ID,
+              text: "Sorry, I encountered an error while processing your question. Please try again.",
+            },
+            (messageId, status) => {
+              setMessageStatuses(prev => ({ ...prev, [messageId]: status }));
+            }
+          );
+          
+          setMessages(prev => [...prev, errorMessage]);
+        }
+      }
     } catch (error) {
       console.error('Error sending message:', error);
       // Restore message text if send failed
