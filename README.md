@@ -1,16 +1,55 @@
-# Welcome to your Expo app 👋
+# MessageAI
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A powerful messaging application with AI capabilities, built with React Native and Expo.
 
-## Get started
+## Features
 
-1. Install dependencies
+- Real-time messaging
+- AI-powered chat assistance
+- Group chats
+- Offline support
+- Presence indicators
+- Typing indicators
+- Message delivery status
+- And more!
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js (v16 or higher)
+- npm or yarn
+- Expo CLI
+- Firebase project
+- OpenAI API key
+
+### Installation
+
+1. Clone the repository
+
+   ```bash
+   git clone <repository-url>
+   cd MessageAI
+   ```
+
+2. Install dependencies
 
    ```bash
    npm install
    ```
 
-2. Start the app
+3. Set up environment variables
+
+   ```bash
+   cp env.example .env
+   ```
+
+   Then edit `.env` and add your configuration values:
+   - Firebase configuration (from your Firebase project settings)
+   - OpenAI API key (required)
+   - n8n webhook URL (optional, for RAG agent features)
+
+4. Start the app
 
    ```bash
    npx expo start
@@ -21,30 +60,32 @@ In the output, you'll find options to open the app in a
 - [development build](https://docs.expo.dev/develop/development-builds/introduction/)
 - [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
 - [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- [Expo Go](https://expo.dev/go)
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## Project Structure
 
-## Get a fresh project
+- `app/` - Main application screens and routing
+- `src/` - Core source code
+  - `components/` - Reusable components
+  - `contexts/` - React contexts for state management
+  - `database/` - Database layer
+  - `hooks/` - Custom React hooks
+  - `services/` - Business logic and API services
+  - `types/` - TypeScript type definitions
+  - `utils/` - Utility functions
+- `functions/` - Cloud functions (Firebase)
+- `projectdesign/` - Design documents and technical specifications
 
-When you're ready, run:
+## Tech Stack
 
-```bash
-npm run reset-project
-```
+- React Native
+- Expo
+- Firebase (Firestore, Realtime Database, Storage, Authentication)
+- TypeScript
+- SQLite (local database)
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Learn More
 
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- [Expo documentation](https://docs.expo.dev/)
+- [Firebase documentation](https://firebase.google.com/docs)
+- [React Native documentation](https://reactnative.dev/)
