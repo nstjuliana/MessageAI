@@ -1,16 +1,16 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -106,6 +106,7 @@ export default function SignUpScreen() {
             <TextInput
               style={[styles.input, errors.email && styles.inputError]}
               placeholder="your.email@example.com"
+              placeholderTextColor="#64748B"
               value={email}
               onChangeText={(text) => {
                 setEmail(text);
@@ -128,6 +129,7 @@ export default function SignUpScreen() {
             <TextInput
               style={[styles.input, errors.password && styles.inputError]}
               placeholder="At least 6 characters"
+              placeholderTextColor="#64748B"
               value={password}
               onChangeText={(text) => {
                 setPassword(text);
@@ -148,6 +150,7 @@ export default function SignUpScreen() {
             <TextInput
               style={[styles.input, errors.confirmPassword && styles.inputError]}
               placeholder="Re-enter your password"
+              placeholderTextColor="#64748B"
               value={confirmPassword}
               onChangeText={(text) => {
                 setConfirmPassword(text);
@@ -197,7 +200,7 @@ export default function SignUpScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
   },
   scrollContent: {
     flexGrow: 1,
@@ -211,12 +214,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#000',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#94A3B8',
     textAlign: 'center',
   },
   form: {
@@ -230,17 +233,18 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: '#E2E8F0',
     marginBottom: 8,
   },
   input: {
     height: 50,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#334155',
     borderRadius: 8,
     paddingHorizontal: 16,
     fontSize: 16,
-    backgroundColor: '#fff',
+    backgroundColor: '#1E293B',
+    color: '#FFFFFF',
   },
   inputError: {
     borderColor: '#FF3B30',
@@ -252,14 +256,14 @@ const styles = StyleSheet.create({
   },
   button: {
     height: 50,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
   },
   buttonPressed: {
-    backgroundColor: '#0051D5',
+    backgroundColor: '#4F46E5',
   },
   buttonDisabled: {
     backgroundColor: '#B0B0B0',
@@ -277,11 +281,11 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 14,
-    color: '#666',
+    color: '#94A3B8',
   },
   link: {
     fontSize: 14,
-    color: '#007AFF',
+    color: '#6366F1',
     fontWeight: '600',
   },
 });

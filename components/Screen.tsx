@@ -42,7 +42,7 @@ Screen.Content = function ScreenContent({ children }: { children: ReactNode }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
   },
   content: {
     flex: 1,

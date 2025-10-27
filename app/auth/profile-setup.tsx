@@ -151,6 +151,7 @@ export default function ProfileSetupScreen() {
               <TextInput
                 style={[styles.usernameInput, errors.username && styles.inputError]}
                 placeholder="username"
+                placeholderTextColor="#64748B"
                 value={username}
                 onChangeText={(text) => {
                   // Only allow lowercase letters, numbers, and underscores
@@ -183,6 +184,7 @@ export default function ProfileSetupScreen() {
             <TextInput
               style={[styles.input, errors.displayName && styles.inputError]}
               placeholder="How should we call you?"
+              placeholderTextColor="#64748B"
               value={displayName}
               onChangeText={(text) => {
                 setDisplayName(text);
@@ -210,6 +212,7 @@ export default function ProfileSetupScreen() {
             <TextInput
               style={[styles.input, styles.textArea]}
               placeholder="Tell others about yourself..."
+              placeholderTextColor="#64748B"
               value={bio}
               onChangeText={setBio}
               autoCapitalize="sentences"
@@ -264,7 +267,7 @@ export default function ProfileSetupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
   },
   scrollContent: {
     flexGrow: 1,
@@ -278,12 +281,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#000',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#94A3B8',
     textAlign: 'center',
   },
   form: {
@@ -299,7 +302,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
@@ -315,7 +318,7 @@ const styles = StyleSheet.create({
   },
   avatarButtonText: {
     fontSize: 14,
-    color: '#007AFF',
+    color: '#6366F1',
     fontWeight: '600',
   },
   inputContainer: {
@@ -324,7 +327,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: '#E2E8F0',
     marginBottom: 8,
   },
   required: {
@@ -334,14 +337,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#334155',
     borderRadius: 8,
-    backgroundColor: '#fff',
+    backgroundColor: '#1E293B',
     height: 50,
   },
   usernamePrefix: {
     fontSize: 16,
-    color: '#007AFF',
+    color: '#6366F1',
     fontWeight: '600',
     paddingLeft: 16,
   },
@@ -352,15 +355,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: 'transparent',
     borderWidth: 0,
+    color: '#FFFFFF',
   },
   input: {
     height: 50,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#334155',
     borderRadius: 8,
     paddingHorizontal: 16,
     fontSize: 16,
-    backgroundColor: '#fff',
+    backgroundColor: '#1E293B',
+    color: '#FFFFFF',
   },
   textArea: {
     height: 90,
@@ -376,32 +381,32 @@ const styles = StyleSheet.create({
   },
   helperText: {
     fontSize: 12,
-    color: '#999',
+    color: '#64748B',
     marginTop: 4,
   },
   readOnlyInput: {
     height: 50,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#334155',
     borderRadius: 8,
     paddingHorizontal: 16,
     justifyContent: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#1E293B',
   },
   readOnlyText: {
     fontSize: 16,
-    color: '#666',
+    color: '#64748B',
   },
   button: {
     height: 50,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
   },
   buttonPressed: {
-    backgroundColor: '#0051D5',
+    backgroundColor: '#4F46E5',
   },
   buttonDisabled: {
     backgroundColor: '#B0B0B0',
@@ -413,7 +418,7 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 12,
-    color: '#999',
+    color: '#64748B',
     textAlign: 'center',
     marginTop: 16,
   },

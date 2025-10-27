@@ -7,17 +7,17 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -183,6 +183,7 @@ export default function ProfileScreen() {
               value={displayName}
               onChangeText={setDisplayName}
               placeholder="Enter your display name"
+              placeholderTextColor="#64748B"
               maxLength={50}
               editable={!isSaving}
             />
@@ -195,6 +196,7 @@ export default function ProfileScreen() {
               value={bio}
               onChangeText={setBio}
               placeholder="Tell us about yourself..."
+              placeholderTextColor="#64748B"
               maxLength={200}
               multiline
               numberOfLines={4}
@@ -257,18 +259,18 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#0F172A',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#0F172A',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#666',
+    color: '#94A3B8',
   },
   header: {
     flexDirection: 'row',
@@ -277,9 +279,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#1E293B',
   },
   backButton: {
     padding: 8,
@@ -287,12 +289,12 @@ const styles = StyleSheet.create({
   },
   backText: {
     fontSize: 18,
-    color: '#007AFF',
+    color: '#6366F1',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#000',
+    color: '#FFFFFF',
   },
   scrollView: {
     flex: 1,
@@ -303,9 +305,9 @@ const styles = StyleSheet.create({
   avatarSection: {
     alignItems: 'center',
     paddingVertical: 32,
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#1E293B',
   },
   avatarTouchable: {
     position: 'relative',
@@ -315,7 +317,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -336,7 +338,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     borderWidth: 2,
     borderColor: '#fff',
     justifyContent: 'center',
@@ -347,22 +349,22 @@ const styles = StyleSheet.create({
   },
   username: {
     fontSize: 16,
-    color: '#8E8E93',
+    color: '#64748B',
     fontWeight: '500',
     marginBottom: 4,
   },
   avatarHint: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#64748B',
   },
   formSection: {
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
     paddingHorizontal: 16,
     paddingVertical: 24,
     marginTop: 20,
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#1E293B',
   },
   field: {
     marginBottom: 24,
@@ -370,18 +372,18 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#000',
+    color: '#E2E8F0',
     marginBottom: 8,
   },
   input: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#1E293B',
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
-    color: '#000',
+    color: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#334155',
   },
   bioInput: {
     height: 100,
@@ -389,29 +391,29 @@ const styles = StyleSheet.create({
   },
   charCount: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#64748B',
     textAlign: 'right',
     marginTop: 4,
   },
   disabledInput: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#1E293B',
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#334155',
   },
   disabledText: {
     fontSize: 16,
-    color: '#8E8E93',
+    color: '#64748B',
   },
   helpText: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#64748B',
     marginTop: 4,
   },
   saveButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#6366F1',
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: 'center',
@@ -426,18 +428,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   infoSection: {
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
     paddingHorizontal: 16,
     paddingVertical: 24,
     marginTop: 20,
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#1E293B',
   },
   infoTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#000',
+    color: '#FFFFFF',
     marginBottom: 16,
   },
   infoRow: {
@@ -447,11 +449,11 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: '#64748B',
   },
   infoValue: {
     fontSize: 14,
-    color: '#000',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
 });
